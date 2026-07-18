@@ -1,7 +1,6 @@
 <Solution>
   <Configurations>
     <Platform Name="x64" />
-    <Platform Name="x86" />
   </Configurations>
-  <Project Path="KI-MA/KI-MA.vcxproj" />
+  <Project Path="KI-MA/KI-MA.vcxproj" Id="8630c99d-cb54-40fc-8ac1-1a6df5d472c3" />
 </Solution>
