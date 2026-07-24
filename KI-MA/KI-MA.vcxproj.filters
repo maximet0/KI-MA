@@ -36,31 +36,40 @@
     <ClCompile Include="src\Core\Logger.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ImGui\backends\imgui_impl_dx12.cpp">
+    <ClCompile Include="src\external\ImGui\backends\imgui_impl_dx12.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ImGui\backends\imgui_impl_win32.cpp">
+    <ClCompile Include="src\external\ImGui\backends\imgui_impl_win32.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ImGui\imgui.cpp">
+    <ClCompile Include="src\external\ImGui\imgui.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ImGui\imgui_demo.cpp">
+    <ClCompile Include="src\external\ImGui\imgui_demo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ImGui\imgui_draw.cpp">
+    <ClCompile Include="src\external\ImGui\imgui_draw.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ImGui\imgui_tables.cpp">
+    <ClCompile Include="src\external\ImGui\imgui_tables.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ImGui\imgui_widgets.cpp">
+    <ClCompile Include="src\external\ImGui\imgui_widgets.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ImGui\misc\cpp\imgui_stdlib.cpp">
+    <ClCompile Include="src\external\ImGui\misc\cpp\imgui_stdlib.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ImGui\misc\fonts\binary_to_compressed_c.cpp">
+    <ClCompile Include="src\external\ImGui\misc\fonts\binary_to_compressed_c.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Graphics\GraphicsPipeline.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Graphics\RenderTarget.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Events\EventSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -83,39 +92,57 @@
     <ClInclude Include="src\Core\Logger.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ImGui\backends\imgui_impl_dx12.h">
+    <ClInclude Include="src\external\ImGui\backends\imgui_impl_dx12.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ImGui\backends\imgui_impl_win32.h">
+    <ClInclude Include="src\external\ImGui\backends\imgui_impl_win32.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ImGui\imconfig.h">
+    <ClInclude Include="src\external\ImGui\imconfig.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ImGui\imgui.h">
+    <ClInclude Include="src\external\ImGui\imgui.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ImGui\imgui_internal.h">
+    <ClInclude Include="src\external\ImGui\imgui_internal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ImGui\imstb_rectpack.h">
+    <ClInclude Include="src\external\ImGui\imstb_rectpack.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ImGui\imstb_textedit.h">
+    <ClInclude Include="src\external\ImGui\imstb_textedit.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ImGui\imstb_truetype.h">
+    <ClInclude Include="src\external\ImGui\imstb_truetype.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ImGui\misc\cpp\imgui_stdlib.h">
+    <ClInclude Include="src\external\ImGui\misc\cpp\imgui_stdlib.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\ImGui\misc\single_file\imgui_single_file.h">
+    <ClInclude Include="src\external\ImGui\misc\single_file\imgui_single_file.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Graphics\GraphicsPipeline.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\external\stb_image.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Graphics\RenderTarget.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Events\EventSystem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Events\Event.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Events\Callbacks.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="src\Shaders\VertexShader.hlsl" />
-    <FxCompile Include="src\Shaders\PixelShader.hlsl" />
+    <FxCompile Include="res\Shaders\VertexShader.hlsl" />
+    <FxCompile Include="res\Shaders\PixelShader.hlsl" />
   </ItemGroup>
 </Project>

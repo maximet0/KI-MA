@@ -45,6 +45,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <MultiProcFXC>false</MultiProcFXC>
+    <CustomBuildAfterTargets>Run</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <MultiProcFXC>false</MultiProcFXC>
@@ -70,6 +71,14 @@
     <FxCompile>
       <ShaderModel>6.0</ShaderModel>
     </FxCompile>
+    <PostBuildEvent>
+      <Command>xcopy "$(ProjectDir)res/Textures" "$(TargetDir)Textures" /E /I /Y</Command>
+    </PostBuildEvent>
+    <CustomBuildStep>
+      <Command>
+      </Command>
+      <TreatOutputAsContent>true</TreatOutputAsContent>
+    </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -94,51 +103,67 @@
     <FxCompile>
       <ShaderModel>6.0</ShaderModel>
     </FxCompile>
+    <PostBuildEvent>
+      <Command>xcopy "$(ProjectDir)res/Textures" "$(TargetDir)Textures" /E /I /Y</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\Core\Application.cpp" />
     <ClCompile Include="src\Core\Logger.cpp" />
+    <ClCompile Include="src\Events\EventSystem.cpp" />
     <ClCompile Include="src\Graphics\GraphicsContext.cpp" />
     <ClCompile Include="src\Core\Window.cpp" />
+    <ClCompile Include="src\Graphics\GraphicsPipeline.cpp" />
     <ClCompile Include="src\Graphics\Renderer.cpp" />
-    <ClCompile Include="src\ImGui\backends\imgui_impl_dx12.cpp" />
-    <ClCompile Include="src\ImGui\backends\imgui_impl_win32.cpp" />
-    <ClCompile Include="src\ImGui\imgui.cpp" />
-    <ClCompile Include="src\ImGui\imgui_demo.cpp" />
-    <ClCompile Include="src\ImGui\imgui_draw.cpp" />
-    <ClCompile Include="src\ImGui\imgui_tables.cpp" />
-    <ClCompile Include="src\ImGui\imgui_widgets.cpp" />
-    <ClCompile Include="src\ImGui\misc\cpp\imgui_stdlib.cpp" />
-    <ClCompile Include="src\ImGui\misc\fonts\binary_to_compressed_c.cpp" />
+    <ClCompile Include="src\external\ImGui\backends\imgui_impl_dx12.cpp" />
+    <ClCompile Include="src\external\ImGui\backends\imgui_impl_win32.cpp" />
+    <ClCompile Include="src\external\ImGui\imgui.cpp" />
+    <ClCompile Include="src\external\ImGui\imgui_demo.cpp" />
+    <ClCompile Include="src\external\ImGui\imgui_draw.cpp" />
+    <ClCompile Include="src\external\ImGui\imgui_tables.cpp" />
+    <ClCompile Include="src\external\ImGui\imgui_widgets.cpp" />
+    <ClCompile Include="src\external\ImGui\misc\cpp\imgui_stdlib.cpp" />
+    <ClCompile Include="src\external\ImGui\misc\fonts\binary_to_compressed_c.cpp" />
+    <ClCompile Include="src\Graphics\RenderTarget.cpp" />
     <ClCompile Include="src\KI-MA.cpp" />
     <ClCompile Include="src\Graphics\Swapchain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Core\Application.h" />
+    <ClInclude Include="src\Events\Callbacks.h" />
+    <ClInclude Include="src\Events\Event.h" />
+    <ClInclude Include="src\Events\EventSystem.h" />
     <ClInclude Include="src\Core\Logger.h" />
+    <ClInclude Include="src\external\stb_image.h" />
     <ClInclude Include="src\Graphics\GraphicsContext.h" />
     <ClInclude Include="src\Core\Window.h" />
+    <ClInclude Include="src\Graphics\GraphicsPipeline.h" />
     <ClInclude Include="src\Graphics\Renderer.h" />
+    <ClInclude Include="src\Graphics\RenderTarget.h" />
     <ClInclude Include="src\Graphics\Swapchain.h" />
-    <ClInclude Include="src\ImGui\backends\imgui_impl_dx12.h" />
-    <ClInclude Include="src\ImGui\backends\imgui_impl_win32.h" />
-    <ClInclude Include="src\ImGui\imconfig.h" />
-    <ClInclude Include="src\ImGui\imgui.h" />
-    <ClInclude Include="src\ImGui\imgui_internal.h" />
-    <ClInclude Include="src\ImGui\imstb_rectpack.h" />
-    <ClInclude Include="src\ImGui\imstb_textedit.h" />
-    <ClInclude Include="src\ImGui\imstb_truetype.h" />
-    <ClInclude Include="src\ImGui\misc\cpp\imgui_stdlib.h" />
-    <ClInclude Include="src\ImGui\misc\single_file\imgui_single_file.h" />
+    <ClInclude Include="src\external\ImGui\backends\imgui_impl_dx12.h" />
+    <ClInclude Include="src\external\ImGui\backends\imgui_impl_win32.h" />
+    <ClInclude Include="src\external\ImGui\imconfig.h" />
+    <ClInclude Include="src\external\ImGui\imgui.h" />
+    <ClInclude Include="src\external\ImGui\imgui_internal.h" />
+    <ClInclude Include="src\external\ImGui\imstb_rectpack.h" />
+    <ClInclude Include="src\external\ImGui\imstb_textedit.h" />
+    <ClInclude Include="src\external\ImGui\imstb_truetype.h" />
+    <ClInclude Include="src\external\ImGui\misc\cpp\imgui_stdlib.h" />
+    <ClInclude Include="src\external\ImGui\misc\single_file\imgui_single_file.h" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="src\Shaders\PixelShader.hlsl">
+    <FxCompile Include="res\Shaders\PixelShader.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">6.8</ShaderModel>
     </FxCompile>
-    <FxCompile Include="src\Shaders\VertexShader.hlsl">
+    <FxCompile Include="res\Shaders\VertexShader.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">6.8</ShaderModel>
     </FxCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

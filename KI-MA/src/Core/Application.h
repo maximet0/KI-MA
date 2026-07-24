@@ -2,6 +2,7 @@
 #include "Window.h"
 #include "Graphics/GraphicsContext.h"
 #include "Graphics/Swapchain.h"
+#include "Events/EventSystem.h"
 
 namespace Core {
 
@@ -52,6 +53,12 @@ namespace Core {
 		Graphics::Renderer* getRenderer() { return m_Renderer; };
 
 		/// <summary>
+		/// Gibt das Event-System der Anwendung zurück.
+		/// </summary>
+		/// <returns></returns>
+		Events::EventSystem* getEventSystem() { return m_EventSystem; };
+
+		/// <summary>
 		/// Gibt das Fenster der Anwendung zurück.
 		/// </summary>
 		/// <returns></returns>
@@ -64,6 +71,8 @@ namespace Core {
 
 		Graphics::Swapchain* m_Swapchain;
 		Graphics::Renderer* m_Renderer;
+
+		Events::EventSystem* m_EventSystem;
 
 		static Application* s_Application;
 

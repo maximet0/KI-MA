@@ -11,6 +11,7 @@ namespace Graphics {
 		Core::Application* app = Core::Application::getApplication();
 		auto factory = app->getGraphicsContext()->getFactory();
 		auto device = app->getGraphicsContext()->getDevice();
+		auto renderer = app->getRenderer();
 
 		// Swapchain erstellen
 		HRESULT res = {};
@@ -29,21 +30,10 @@ namespace Graphics {
 
 		// Swapchain-Descriptor-Heap erstellen
 
-		D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
-		heapDesc.NumDescriptors = frameCount;
-		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-		heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-
-		res = device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_RTVHeap));
-		m_RTVDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-		auto handle = m_RTVHeap->GetCPUDescriptorHandleForHeapStart();
-
 		for (UINT i = 0; i < frameCount; i++)
 		{
 			m_Swapchain->GetBuffer(i, IID_PPV_ARGS(&m_BackBuffers[i]));
-			device->CreateRenderTargetView(m_BackBuffers[i].Get(), nullptr, handle);
-			handle.ptr += m_RTVDescriptorSize;
+			device->CreateRenderTargetView(m_BackBuffers[i].Get(), nullptr, renderer->getNextRTVDescriptorHandle(m_RTVDescriptorIndices[i]));
 		}
 
 	}
@@ -54,7 +44,6 @@ namespace Graphics {
 		{
 			m_BackBuffers[i]->Release();
 		}
-		m_RTVHeap->Release();
 		m_Swapchain->Release();
 	}
 
@@ -78,12 +67,10 @@ namespace Graphics {
 		
 		m_Swapchain->ResizeBuffers(frameCount, size.x, size.y, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING);
 
-		auto handle = m_RTVHeap->GetCPUDescriptorHandleForHeapStart();
 		for (UINT i = 0; i < frameCount; i++)
 		{
 			m_Swapchain->GetBuffer(i, IID_PPV_ARGS(&m_BackBuffers[i]));
-			device->CreateRenderTargetView(m_BackBuffers[i].Get(), nullptr, handle);
-			handle.ptr += m_RTVDescriptorSize;
+			device->CreateRenderTargetView(m_BackBuffers[i].Get(), nullptr, app->getRenderer()->getNextRTVDescriptorHandle(m_RTVDescriptorIndices[i]));
 		}
 	}
 
@@ -99,9 +86,8 @@ namespace Graphics {
 
 	D3D12_CPU_DESCRIPTOR_HANDLE Swapchain::getCurrentRTV()
 	{
-		auto handle = m_RTVHeap->GetCPUDescriptorHandleForHeapStart();
-		handle.ptr += (m_RTVDescriptorSize * getBackBufferIndex());
-		return handle;
+		auto renderer = Core::Application::getApplication()->getRenderer();
+		return renderer->getRTVDescriptorHandle(m_RTVDescriptorIndices[getBackBufferIndex()]);
 	}
 
 }
