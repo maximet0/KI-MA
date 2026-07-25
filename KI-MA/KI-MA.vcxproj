@@ -111,6 +111,8 @@
     <ClCompile Include="src\Core\Application.cpp" />
     <ClCompile Include="src\Core\Logger.cpp" />
     <ClCompile Include="src\Events\EventSystem.cpp" />
+    <ClCompile Include="src\Game\GameInstance.cpp" />
+    <ClCompile Include="src\Game\GameLevel.cpp" />
     <ClCompile Include="src\Graphics\GraphicsContext.cpp" />
     <ClCompile Include="src\Core\Window.cpp" />
     <ClCompile Include="src\Graphics\GraphicsPipeline.cpp" />
@@ -135,6 +137,9 @@
     <ClInclude Include="src\Events\EventSystem.h" />
     <ClInclude Include="src\Core\Logger.h" />
     <ClInclude Include="src\external\stb_image.h" />
+    <ClInclude Include="src\Game\GameInstance.h" />
+    <ClInclude Include="src\Game\GameLevel.h" />
+    <ClInclude Include="src\Game\GameObject.h" />
     <ClInclude Include="src\Graphics\GraphicsContext.h" />
     <ClInclude Include="src\Core\Window.h" />
     <ClInclude Include="src\Graphics\GraphicsPipeline.h" />

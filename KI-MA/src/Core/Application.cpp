@@ -6,6 +6,7 @@
 
 #include "Events/Callbacks.h"
 #include "Logger.h"
+#include <thread>
 
 namespace Core {
 	Application* Application::s_Application = nullptr;
@@ -28,19 +29,15 @@ namespace Core {
 		ImGui::DestroyContext();
 	}
 
-	Graphics::RenderTarget* renderTarget[200];
 
-	float spriteX[200];
-	float spriteY[200];
+	DirectX::XMINT2 g_oldSize;
 
-	int32_t focusedInstance = -1;
+	constexpr float TS = 1.0f / 60.0f;
+	constexpr float FS = 1.0f / 30.0f;
 
-	bool keys[256] = { 0 };
-
-	void keyboardCallback(Core::Window* window, Events::KeyState state, Events::KeyboardKey key, int scancode) {
-		if (state == Events::KeyState::Down || state == Events::KeyState::Clicked) keys[(uint8_t)key] = true;
-		else if (state == Events::KeyState::Up) keys[(uint8_t)key] = false;
-	}
+	double g_Accumulator = 0.0;
+	double g_RenderAccumulator = 0.0;
+	double g_LastTime = 0.0;
 
 	void Application::onStart() {
 		//Erstellt das Fenster, den Grafik-Kontext, die Swapchain und den Renderer.
@@ -49,18 +46,19 @@ namespace Core {
 		m_Context = new Graphics::GraphicsContext();
 		m_Renderer = new Graphics::Renderer();
 		m_Swapchain = new Graphics::Swapchain(m_Window);
-		for (uint32_t i = 0; i < 200; i++) {
-			renderTarget[i] = new Graphics::RenderTarget({ 1280, 720 });
-		}
-		
-		m_EventSystem->registerCallback<Events::KeyboardKeyCallback>(Events::EventType::KEYBOARD_KEY, keyboardCallback);
 
 		ImGui::CreateContext();
 		ImGui_ImplWin32_Init(m_Window->getHandle());
 		m_Renderer->initImGui();
-	}
 
-	DirectX::XMINT2 g_oldSize;
+		Game::GameSettings settings;
+		settings.levelEditorMode = true;
+		settings.levelPath = "testLevel.lvl";
+
+		m_GameInstance = new Game::GameInstance(settings);
+
+		g_LastTime = std::chrono::high_resolution_clock::now().time_since_epoch().count() / 1000000000.0;
+	}
 
 	void Application::onUpdate() {
 		if (m_Window->getSize().x != g_oldSize.x || m_Window->getSize().y != g_oldSize.y)
@@ -69,75 +67,49 @@ namespace Core {
 			m_Swapchain->resize(m_Window->getSize());
 		}
 
-		if (focusedInstance != -1) {
-			if (keys[Events::KeyboardKey::Key_Right]) {
-				spriteX[focusedInstance] += 1.0f;
-			}
 
-			if (keys[Events::KeyboardKey::Key_Left]) {
-				spriteX[focusedInstance] -= 1.0f;
-			}
+		double currentTime = std::chrono::high_resolution_clock::now().time_since_epoch().count() / 1000000000.0;
+		double deltaTime = currentTime - g_LastTime;
+		g_LastTime = currentTime;
 
-			if (keys[Events::KeyboardKey::Key_Up]) {
-				spriteY[focusedInstance] -= 1.0f;
-			}
+		g_Accumulator += deltaTime;
+		g_RenderAccumulator += deltaTime;
 
-			if (keys[Events::KeyboardKey::Key_Down]) {
-				spriteY[focusedInstance] += 1.0f;
-			}
-		}
-		
-		ImGui_ImplDX12_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
+		bool tick = false;
 
-		static bool open = true;
-		ImGui::ShowDemoWindow(&open);
+		while (g_Accumulator >= TS) {
+			g_Accumulator -= TS;
+			tick = true;
 
-		ImGui::Begin("Render Targets");
-		for (uint32_t i = 0; i < 200; i++)
-		{
-			auto textureHandle = m_Renderer->getSRVGPUDescriptorHandle(renderTarget[i]->getSRVDescriptorIndex());
-			ImGui::Text("Render Target %d %d", i, textureHandle.ptr);
-			ImGui::Image((ImTextureID)(uintptr_t)textureHandle.ptr, ImVec2(renderTarget[i]->getSize().x / 2, renderTarget[i]->getSize().y / 2));
 
-			if (ImGui::IsItemHovered()) {
-				focusedInstance = i;
-			}
+			m_GameInstance->update(TS);
+
 
 		}
-		
-		ImGui::End();
 
-		Logger::Debug("Focused Instance: {}", focusedInstance);
+		while (g_RenderAccumulator >= FS) {
+			g_RenderAccumulator -= FS;
 
+			ImGui_ImplDX12_NewFrame();
+			ImGui_ImplWin32_NewFrame();
+			ImGui::NewFrame();
 
-		m_Renderer->beginFrame();
-		
-		for (uint32_t i = 0; i < 200; i++)
-		{
-			m_Renderer->beginRenderTarget(renderTarget[i]);
-			for (uint32_t x = 0; x < 10; x++)
-			{
-				for (uint32_t y = 0; y < 10; y++) {
-					m_Renderer->submitRect({ 64.0f + x * 64.0f, 64.0f + y * 64.0f }, { 32.0f, 32.0f }, 0);
-				}
+			m_Renderer->beginFrame();
+			m_GameInstance->render();
 
-			}
-
-			m_Renderer->submitRect({ 64.0f + spriteX[i], 64.0f + spriteY[i] }, { 64.0f, 64.0f }, 0);
-			m_Renderer->drawRects();
-
-
-			m_Renderer->endRenderTarget(renderTarget[i]);
+			m_GameInstance->drawGUI();
+			m_Renderer->endFrame();
 		}
 
 
-		
-		m_Renderer->endFrame();
 		g_oldSize = m_Window->getSize();
 		m_Window->pollEvents();
 		m_EventSystem->pollEvents();
+
+		double sleepTime = TS - g_RenderAccumulator;
+		if (sleepTime > 0.0) {
+			std::this_thread::sleep_for(std::chrono::duration<double>(sleepTime));
+		}
 	}
 
 }

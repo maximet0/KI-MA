@@ -4,6 +4,8 @@
 #include "Graphics/Swapchain.h"
 #include "Events/EventSystem.h"
 
+#include "Game/GameInstance.h"
+
 namespace Core {
 
 	// Hauptkalsse der Anwendung
@@ -75,6 +77,8 @@ namespace Core {
 		Events::EventSystem* m_EventSystem;
 
 		static Application* s_Application;
+
+		Game::GameInstance* m_GameInstance;
 
 	};
 }
