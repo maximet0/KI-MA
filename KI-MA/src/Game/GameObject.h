@@ -10,11 +10,20 @@ namespace Game {
 		Player,
 	};
 
+	struct GameCollider {
+		DirectX::XMFLOAT2 position = {0, 0};
+		DirectX::XMFLOAT2 size = {0, 0};
+	};
+
 	struct GameObject {
 		GameObjectType type = GameObjectType::Background;	
-		DirectX::XMFLOAT2 position;
-		DirectX::XMFLOAT2 size;
-		uint32_t textureHandle;
+		DirectX::XMFLOAT2 position = {0, 0};
+		DirectX::XMFLOAT2 size = {0, 0};
+		uint32_t textureHandle = 0;
+
+		uint32_t colliderCount = 0;
+		std::array<GameCollider, 32> colliders;
+
 	};
 
 }

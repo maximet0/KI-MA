@@ -66,6 +66,11 @@ namespace Core {
 		/// <returns></returns>
 		Window* getWindow() { return m_Window; };
 
+		/// <summary>
+		/// Schließt die Anwendung.
+		/// </summary>
+		void exit() { m_IsRunning = false; };
+
 	private:
 		bool m_IsRunning = true;
 		Window* m_Window;

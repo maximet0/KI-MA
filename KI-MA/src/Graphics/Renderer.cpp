@@ -240,7 +240,7 @@ namespace Graphics {
 	{
 		if (textureIndex == -1)
 			textureIndex = createTexture("Textures/brick.png");
-		m_RectDataPtr[m_RectCount].pos = position;
+		m_RectDataPtr[m_RectCount].pos = { position.x + size.x / 2, position.y + size.y / 2 };
 		m_RectDataPtr[m_RectCount].size = size;
 		m_RectDataPtr[m_RectCount].textureID = textureIndex;//textureHandle;
 
@@ -334,9 +334,9 @@ namespace Graphics {
 
 		const float color[4] =
 		{
-			0.2f,
-			0.3f,
-			0.7f,
+			0.22f,
+			0.22f,
+			0.22f,
 			1.0f
 		};
 
@@ -399,7 +399,8 @@ namespace Graphics {
 
 		m_CmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
-		float color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		DirectX::XMFLOAT4 clearColor = renderTarget->getClearColor();
+		float color[4] = { clearColor.x, clearColor.y, clearColor.z, clearColor.w };
 		m_CmdList->ClearRenderTargetView(rtv, color, 0, nullptr);
 
 		D3D12_VIEWPORT viewport = {};

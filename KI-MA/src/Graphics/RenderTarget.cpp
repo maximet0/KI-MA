@@ -3,13 +3,14 @@
 #include "Core/Application.h"
 
 namespace Graphics {
-	Graphics::RenderTarget::RenderTarget(DirectX::XMFLOAT2 size)
+	Graphics::RenderTarget::RenderTarget(DirectX::XMFLOAT2 size, DirectX::XMFLOAT4 clearColor)
+		: m_ClearColor(clearColor)
 	{
 		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
 		auto renderer = Core::Application::getApplication()->getRenderer();
 
 		m_Size = size;
-		createRenderTarget();
+		createRenderTarget(m_ClearColor);
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = renderer->getNextRTVDescriptorHandle(m_RTVDescriptorIndex);
 		device->CreateRenderTargetView(m_RenderTarget.Get(), nullptr, rtvHandle);
@@ -36,7 +37,7 @@ namespace Graphics {
 		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
 		auto renderer = Core::Application::getApplication()->getRenderer();
 		m_Size = size;
-		createRenderTarget();
+		createRenderTarget(m_ClearColor);
 		device->CreateRenderTargetView(m_RenderTarget.Get(), nullptr, renderer->getRTVDescriptorHandle(m_RTVDescriptorIndex));
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -51,7 +52,7 @@ namespace Graphics {
 		device->CreateShaderResourceView(m_RenderTarget.Get(), &srvDesc, renderer->getSRVDescriptorHandle(m_SRVDescriptorIndex));
 	}
 
-	void RenderTarget::createRenderTarget() {
+	void RenderTarget::createRenderTarget(DirectX::XMFLOAT4 clearColor) {
 		Core::Application* app = Core::Application::getApplication();
 		auto device = app->getGraphicsContext()->getDevice();
 
@@ -71,10 +72,10 @@ namespace Graphics {
 
 		D3D12_CLEAR_VALUE clearValue = {};
 		clearValue.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		clearValue.Color[0] = 0.0f;
-		clearValue.Color[1] = 0.0f;
-		clearValue.Color[2] = 0.0f;
-		clearValue.Color[3] = 1.0f;
+		clearValue.Color[0] = clearColor.x;
+		clearValue.Color[1] = clearColor.y;
+		clearValue.Color[2] = clearColor.z;
+		clearValue.Color[3] = clearColor.w;
 
 		device->CreateCommittedResource(
 			&heapProperties, D3D12_HEAP_FLAG_NONE,

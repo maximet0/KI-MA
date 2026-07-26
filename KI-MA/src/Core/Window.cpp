@@ -33,8 +33,8 @@ namespace Core {
 		}
 		case WM_CLOSE: {
 			app->getEventSystem()->registerEvent(new Events::WindowCloseEvent(window));
-			DestroyWindow(hwnd);
-			break;
+			//DestroyWindow(hwnd);
+			return 0;
 		}
 		case WM_ERASEBKGND:
 			return 1; // Hintergrund nicht löschen, um Flackern zu vermeiden
@@ -42,11 +42,13 @@ namespace Core {
 			POINT absolutePos = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 			ClientToScreen(hwnd, &absolutePos);
 			app->getEventSystem()->registerEvent(new Events::MousePosEvent(window, { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) }, { absolutePos.x, absolutePos.y }));
+			break;
 		}
 		case WM_NCMOUSEMOVE: {
 			POINT mousePos = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 			ScreenToClient(hwnd, &mousePos);
 			app->getEventSystem()->registerEvent(new Events::MousePosEvent(window, { mousePos.x, mousePos.y }, { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) }));
+			break;
 		}
 		case WM_MOUSELEAVE:
 		case WM_NCMOUSELEAVE:

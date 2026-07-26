@@ -9,7 +9,7 @@ namespace Game {
 	struct GameSettings {
 		std::filesystem::path levelPath;
 		bool levelEditorMode = false;
-
+		bool showColliders = false;
 	};
 
 	class GameInstance {
@@ -17,7 +17,7 @@ namespace Game {
 		GameInstance(GameSettings settings);
 		~GameInstance();
 
-		void setGameSettings(const GameSettings& settings) { m_GameSettings = settings; }
+		void setGameSettings(GameSettings settings);
 
 		void update(float deltaTime);
 
@@ -27,6 +27,10 @@ namespace Game {
 		Graphics::RenderTarget* getTarget() { return m_Target; };
 
 	private:
+		bool m_CloseApplication = false;
+		bool m_LevelSaved = true;
+		GameSettings m_LastGameSettings;
+
 		Graphics::RenderTarget* m_Target;
 
 		GameSettings m_GameSettings;

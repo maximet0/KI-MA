@@ -1,4 +1,5 @@
 #include "GameLevel.h"
+#include <fstream>
 
 namespace Game {
 	GameLevel::GameLevel()
@@ -33,12 +34,38 @@ namespace Game {
 
 	void GameLevel::loadLevel(std::filesystem::path levelPath)
 	{
-		//TODO: Levels laden / Speichern
+		if (std::filesystem::exists(levelPath)) {
+			std::fstream file(levelPath, std::ios::in | std::ios::binary);
+			file.seekg(0, std::ios::end);
+			uint32_t fileSize = file.tellg();
+			file.seekg(0, std::ios::beg);
+			file.read(reinterpret_cast<char*>(m_GameObjects.data()), fileSize);
+			m_ObjectCount = fileSize / sizeof(GameObject);
+			m_LastFreeIndex = m_ObjectCount;
+		}
+		else {
+			m_FreeSlots.clear();
+			memset(m_GameObjects.data(), 0, maxGameObjects * sizeof(GameObject));
+			m_ObjectCount = 0;
+			m_LastFreeIndex = 0;
+		}
 	}
 
 	void GameLevel::saveLevel(std::filesystem::path levelPath)
 	{
-		//TODO: Levels laden / Speichern
+		std::fstream file(levelPath, std::ios::out | std::ios::binary);
+		GameObject* gameObjects = new GameObject[m_LastFreeIndex];
+
+		uint16_t validIndex = 0;
+		for (uint16_t i = 0; i < m_LastFreeIndex; i++) {
+			if (m_GameObjects[i].type == GameObjectType::Invalid) continue;
+
+			gameObjects[validIndex] = m_GameObjects[i];
+			validIndex++;
+		}
+
+		file.write(reinterpret_cast<char*>(gameObjects), validIndex * sizeof(GameObject));
+		delete[] gameObjects;
 	}
 
 }
