@@ -6,6 +6,11 @@
 #include <wrl.h>
 
 namespace Graphics {
+	struct PipelineSettings {
+		D3D12_FILL_MODE fillMode = D3D12_FILL_MODE::D3D12_FILL_MODE_SOLID;
+		D3D12_PRIMITIVE_TOPOLOGY_TYPE topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE::D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	};
+
 	class GraphicsPipeline {
 	public:
 		GraphicsPipeline();
@@ -21,7 +26,7 @@ namespace Graphics {
 		void resetRootParameters() { m_RootParameters.clear(); }
 		void resetStaticSamplers() { m_StaticSamplers.clear(); }
 
-		void recreatePipelineState(ID3D12Device* device);
+		void recreatePipelineState(ID3D12Device* device, const PipelineSettings& settings);
 
 		void usePipeline(ID3D12GraphicsCommandList* cmdList);
 	private:

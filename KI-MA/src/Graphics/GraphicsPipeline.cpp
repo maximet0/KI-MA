@@ -67,7 +67,7 @@ namespace Graphics {
 		m_StaticSamplers.push_back(sampler);
 	}
 
-	void GraphicsPipeline::recreatePipelineState(ID3D12Device* device)
+	void GraphicsPipeline::recreatePipelineState(ID3D12Device* device, const PipelineSettings& settings)
 	{
 		if (m_PipelineState != nullptr) {
 			m_PipelineState.Reset();
@@ -91,7 +91,7 @@ namespace Graphics {
 		psoDesc.VS = m_VertexShaderBytecode;
 		psoDesc.PS = m_PixelShaderBytecode;
 
-		psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+		psoDesc.RasterizerState.FillMode = settings.fillMode;
 		psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 		psoDesc.RasterizerState.FrontCounterClockwise = FALSE;
 		psoDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
@@ -101,14 +101,27 @@ namespace Graphics {
 		psoDesc.RasterizerState.MultisampleEnable = FALSE;
 		psoDesc.RasterizerState.AntialiasedLineEnable = FALSE;
 
-		psoDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
+		psoDesc.BlendState.AlphaToCoverageEnable = FALSE;
+		psoDesc.BlendState.IndependentBlendEnable = FALSE;
+
+		psoDesc.BlendState.RenderTarget[0].BlendEnable = TRUE;
 		psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
 		psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+		psoDesc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		psoDesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		psoDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+
+		psoDesc.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+		psoDesc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ZERO;
+		psoDesc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ONE;
+
+
 
 		psoDesc.DepthStencilState.DepthEnable = FALSE;
 		psoDesc.DepthStencilState.StencilEnable = FALSE;
 
-		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+		psoDesc.PrimitiveTopologyType = settings.topologyType;
 		psoDesc.NumRenderTargets = 1;
 		psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 		psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;

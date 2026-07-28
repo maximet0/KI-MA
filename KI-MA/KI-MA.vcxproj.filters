@@ -159,5 +159,7 @@
   <ItemGroup>
     <FxCompile Include="res\Shaders\VertexShader.hlsl" />
     <FxCompile Include="res\Shaders\PixelShader.hlsl" />
+    <FxCompile Include="res\Shaders\LineVertexShader.hlsl" />
+    <FxCompile Include="res\Shaders\LinePixelShader.hlsl" />
   </ItemGroup>
 </Project>

@@ -13,12 +13,22 @@ namespace Graphics {
 	constexpr uint32_t frameCount = 2;
 
 	constexpr uint32_t maxRects = 1000000;
+	constexpr uint32_t maxLines = 1000000;
+
 
 	struct RectData
 	{
 		DirectX::XMFLOAT2 pos;
 		DirectX::XMFLOAT2 size;
 		uint32_t textureID;
+	};
+
+	struct LineData
+	{
+		DirectX::XMFLOAT2 begin;
+		uint32_t beginColor;
+		DirectX::XMFLOAT2 end;
+		uint32_t endColor;
 	};
 
 
@@ -40,8 +50,10 @@ namespace Graphics {
 		Microsoft::WRL::ComPtr<ID3D12Resource> createBuffer(size_t size, D3D12_HEAP_TYPE type, D3D12_RESOURCE_STATES initState);
 
 		void submitRect(DirectX::XMFLOAT2 position, DirectX::XMFLOAT2 size, uint32_t textureHandle);
+		void submitLine(DirectX::XMFLOAT2 begin, DirectX::XMFLOAT2 end, uint32_t color);
 
 		void drawRects();
+		void drawLines();
 		void waitForGPU();
 
 		D3D12_CPU_DESCRIPTOR_HANDLE getRTVDescriptorHandle(uint32_t index);
@@ -57,6 +69,8 @@ namespace Graphics {
 		void transition(ID3D12Resource* res, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 
 		GraphicsPipeline m_DefaultPipeline;
+		GraphicsPipeline m_LinePipeline;
+
 
 		ID3D12GraphicsCommandList* m_CmdList;
 		ID3D12CommandAllocator* m_CmdAllocators[frameCount];
@@ -79,11 +93,19 @@ namespace Graphics {
 		uint32_t m_CurrentRectOffset = 0;
 		uint32_t m_CurrentRectCount = 0;
 
-		RenderTarget* m_CurrentRenderTarg = nullptr;
+		uint32_t m_CurrentLineOffset = 0;
+		uint32_t m_CurrentLineCount = 0;
+
+		RenderTarget* m_CurrentRenderTarget = nullptr;
 
 		uint32_t m_RectCount = 0;
 		Microsoft::WRL::ComPtr<ID3D12Resource> m_RectDataBuf = nullptr;
 		RectData* m_RectDataPtr = nullptr;
+
+		uint32_t m_LineCount = 0;
+		Microsoft::WRL::ComPtr<ID3D12Resource> m_LineDataBuf = nullptr;
+		LineData* m_LineDataPtr = nullptr;
+
 	};
 
 }

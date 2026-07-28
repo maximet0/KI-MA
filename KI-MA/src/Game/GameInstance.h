@@ -27,6 +27,8 @@ namespace Game {
 		Graphics::RenderTarget* getTarget() { return m_Target; };
 
 	private:
+		bool drawObjectProperties(GameObject& obj, bool pos);
+
 		bool m_CloseApplication = false;
 		bool m_LevelSaved = true;
 		GameSettings m_LastGameSettings;
@@ -35,6 +37,10 @@ namespace Game {
 
 		GameSettings m_GameSettings;
 		GameLevel m_GameLevel;
+
+		bool m_GridLock = true;
+		bool m_DrawMode = false;
+		GameObject m_DrawObject;
 	};
 
 }

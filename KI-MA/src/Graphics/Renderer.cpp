@@ -46,6 +46,7 @@ namespace Graphics {
 		m_RTVDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 		m_RTVHeapCPUStart = m_RTVHeap->GetCPUDescriptorHandleForHeapStart();
 
+
 		m_DefaultPipeline.setShaders("VertexShader.cso", "PixelShader.cso");
 		m_DefaultPipeline.addInputElement({ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
 		m_DefaultPipeline.addInputElement({ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
@@ -78,10 +79,29 @@ namespace Graphics {
 		samplerDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 		m_DefaultPipeline.addStaticSampler(samplerDesc);
-		m_DefaultPipeline.recreatePipelineState(device.Get());
+
+		PipelineSettings settings;
+		m_DefaultPipeline.recreatePipelineState(device.Get(), settings);
+
+		m_LinePipeline.setShaders("LineVertexShader.cso", "LinePixelShader.cso");
+		m_LinePipeline.addInputElement({ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+		m_LinePipeline.addInputElement({ "COLOR", 0, DXGI_FORMAT_R32_UINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+
+		rootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParam.Descriptor.ShaderRegister = 0;
+		rootParam.Descriptor.RegisterSpace = 0;
+		rootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		m_LinePipeline.addRootParameter(rootParam);
+
+		settings.topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+		m_LinePipeline.recreatePipelineState(device.Get(), settings);
+
 
 		m_RectDataBuf = createBuffer(sizeof(RectData) * maxRects, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
 		m_RectDataBuf->Map(0, nullptr, reinterpret_cast<void**>(&m_RectDataPtr));
+
+		m_LineDataBuf = createBuffer(sizeof(LineData) * maxLines, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+		m_LineDataBuf->Map(0, nullptr, reinterpret_cast<void**>(&m_LineDataPtr));
 
 	}
 
@@ -127,6 +147,9 @@ namespace Graphics {
 
 		m_RectCount = 0;
 		m_CurrentRectOffset = 0;
+
+		m_LineCount = 0;
+		m_CurrentLineOffset = 0;
 	}
 
 
@@ -248,6 +271,17 @@ namespace Graphics {
 		m_CurrentRectCount++;
 	}
 
+	void Renderer::submitLine(DirectX::XMFLOAT2 begin, DirectX::XMFLOAT2 end, uint32_t color)
+	{
+		m_LineDataPtr[m_LineCount].begin = begin;
+		m_LineDataPtr[m_LineCount].beginColor = color;
+		m_LineDataPtr[m_LineCount].end = end;
+		m_LineDataPtr[m_LineCount].endColor = color;
+
+		m_LineCount++;
+		m_CurrentLineCount++;
+	}
+
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuf;
 	Microsoft::WRL::ComPtr<ID3D12Resource> indexBuf;
 
@@ -290,12 +324,14 @@ namespace Graphics {
 
 
 		DirectX::XMMATRIX cameraView = DirectX::XMMatrixIdentity();
-		DirectX::XMMATRIX cameraProjection = DirectX::XMMatrixOrthographicOffCenterLH(0.0f, (float)m_CurrentRenderTarg->getSize().x, (float)m_CurrentRenderTarg->getSize().y, 0.0f, 0.0f, 1.0f);
+		DirectX::XMMATRIX cameraProjection = DirectX::XMMatrixOrthographicOffCenterLH(0.0f, (float)m_CurrentRenderTarget->getSize().x, (float)m_CurrentRenderTarget->getSize().y, 0.0f, 0.0f, 1.0f);
 
 		DirectX::XMMATRIX mvp = cameraView * cameraProjection;
 
 		memcpy(constBufPtr, &mvp, sizeof(DirectX::XMMATRIX));
 
+
+		m_DefaultPipeline.usePipeline(m_CmdList);
 
 		m_CmdList->SetGraphicsRootConstantBufferView(0, constantBuf->GetGPUVirtualAddress());
 		m_CmdList->SetGraphicsRootShaderResourceView(1, m_RectDataBuf->GetGPUVirtualAddress());
@@ -318,6 +354,27 @@ namespace Graphics {
 
 		m_CurrentRectOffset = m_RectCount;
 		m_CurrentRectCount = 0;
+	}
+
+	void Renderer::drawLines()
+	{
+		//TODO: Correct Camera
+
+		m_LinePipeline.usePipeline(m_CmdList);
+
+		m_CmdList->SetGraphicsRootConstantBufferView(0, constantBuf->GetGPUVirtualAddress());
+
+		D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
+		vertexBufferView.BufferLocation = m_LineDataBuf->GetGPUVirtualAddress();
+		vertexBufferView.SizeInBytes = sizeof(LineData) * m_LineCount;
+		vertexBufferView.StrideInBytes = sizeof(LineData) / 2;
+
+		m_CmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+		m_CmdList->IASetVertexBuffers(0, 1, &vertexBufferView);
+		m_CmdList->DrawInstanced(m_CurrentLineCount * 2, 1, m_CurrentLineOffset * 2, 0);
+		
+		m_CurrentLineOffset = m_LineCount;
+		m_CurrentLineCount = 0;
 	}
 
 	uint32_t g_FenceValue = 0;
@@ -417,9 +474,7 @@ namespace Graphics {
 		m_CmdList->RSSetViewports(1, &viewport);
 		m_CmdList->RSSetScissorRects(1, &scissorRect);
 
-		m_DefaultPipeline.usePipeline(m_CmdList);
-
-		m_CurrentRenderTarg = renderTarget;
+		m_CurrentRenderTarget = renderTarget;
 
 	}
 

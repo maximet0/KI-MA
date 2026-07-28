@@ -33,7 +33,7 @@ namespace Core {
 	DirectX::XMINT2 g_oldSize;
 
 	constexpr float TS = 1.0f / 60.0f;
-	constexpr float FS = 1.0f / 30.0f;
+	constexpr float FS = 1.0f / 60.0f;
 
 	double g_Accumulator = 0.0;
 	double g_RenderAccumulator = 0.0;

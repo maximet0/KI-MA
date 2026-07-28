@@ -12,13 +12,25 @@ namespace Game {
 	GameInstance::GameInstance(GameSettings settings)
 		: m_GameSettings(settings)
 	{
-		m_Target = new Graphics::RenderTarget({ 640, 360 });
+		m_Target = new Graphics::RenderTarget({ 640, 360 }, {0.1, 0.3, 0.7, 1.0});
 		m_GameLevel.loadLevel(m_GameSettings.levelPath);
 
 		Core::Application::getApplication()->getEventSystem()->registerCallback<Events::WindowCloseCallback>(Events::EventType::WINDOW_CLOSE, [this](Core::Window * window) {
 			m_CloseApplication = true;
 		});
 
+		m_DrawObject.type = GameObjectType::Background;
+		m_DrawObject.position = { 0, 0 };
+		m_DrawObject.size = { 32, 32 };
+		m_DrawObject.textureHandle = 1;
+
+		m_DrawObject.colliders[0].position = { 0, 0 };
+		m_DrawObject.colliders[0].size = { 32, 32 };
+		m_DrawObject.colliderCount = 1;
+
+
+		ImGuiIO& io = ImGui::GetIO();
+		io.ConfigWindowsMoveFromTitleBarOnly = true;
 	}
 
 	GameInstance::~GameInstance()
@@ -43,6 +55,41 @@ namespace Game {
 		
 	}
 
+	bool GameInstance::drawObjectProperties(GameObject& obj, bool pos) {
+		int modified = 0;
+
+
+		if (pos) {
+			if (ImGui::DragFloat2("Position", &obj.position.x, m_GridLock ? 8.0f : 1.0f) ) {
+				modified += 1;
+				if (m_GridLock) {
+					obj.position.x = std::floor(obj.position.x / 32.0f) * 32.0f;
+					obj.position.y = std::floor(obj.position.y / 32.0f) * 32.0f;
+				}
+				
+			}
+		}
+		if (ImGui::DragFloat2("Size", &obj.size.x, m_GridLock ? 8.0f : 1.0f)) {
+			modified += 1;
+			if (m_GridLock) {
+				obj.size.x = std::floor(obj.size.x / 32.0f) * 32.0f;
+				obj.size.y = std::floor(obj.size.y / 32.0f) * 32.0f;
+			}
+		}
+	
+		modified += ImGui::InputInt("Texture Handle", (int*)&obj.textureHandle);
+		if (ImGui::TreeNodeEx("Colliders", ImGuiTreeNodeFlags_DefaultOpen, "Colliders (%d)", obj.colliderCount)) {
+			for (uint32_t i = 0; i < obj.colliderCount; i++) {
+				if (ImGui::TreeNodeEx((void*)(intptr_t)i, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, "Collider %d", i)) {
+					modified += ImGui::DragFloat2("Position", &obj.colliders[i].position.x, 0.5f);
+					modified += ImGui::DragFloat2("Size", &obj.colliders[i].size.x, 0.5f);
+				}
+			}
+			ImGui::TreePop();
+		}
+
+		return modified > 0;
+	}
 
 	void GameInstance::drawGUI()
 	{
@@ -57,18 +104,28 @@ namespace Game {
 			static GameSettings currentSettings = m_GameSettings;
 
 			std::string levelPathStr = currentSettings.levelPath.string();
+			ImGui::Text("Level Editor");
+
+			ImGui::Checkbox("Grid Lock", &m_GridLock);
+			ImGui::Checkbox("Draw Mode", &m_DrawMode);
+			if (m_DrawMode) {
+				ImGui::Text("Draw Object Properties");
+				drawObjectProperties(m_DrawObject, false);
+
+			}
+			ImGui::Separator();
+			ImGui::Text("Game Settings");
 			ImGui::InputText("Level Path", (char*)levelPathStr.c_str(), 256);
 			currentSettings.levelPath = levelPathStr;
 			ImGui::Checkbox("Level Editor Mode", &currentSettings.levelEditorMode);
 			ImGui::Checkbox("Show Colliders", &currentSettings.showColliders);
 
 			if (ImGui::Button("Save Settings")) {
-				if (currentSettings.levelEditorMode != m_GameSettings.levelEditorMode || currentSettings.levelPath != m_GameSettings.levelPath) {
+				if (currentSettings.levelEditorMode != m_GameSettings.levelEditorMode || currentSettings.levelPath != m_GameSettings.levelPath || currentSettings.showColliders != m_GameSettings.showColliders) {
 					saveSettings = true;
 				}
 			}
-
-
+			ImGui::SameLine();
 			if (ImGui::Button("Save Level")) {
 				m_GameLevel.saveLevel(m_GameSettings.levelPath);
 				m_LevelSaved = true;
@@ -93,30 +150,47 @@ namespace Game {
 			ImGui::Image((ImTextureID)(uintptr_t)textureHandle.ptr, ImVec2(m_Target->getSize().x, m_Target->getSize().y));
 			ImVec2 offset = ImGui::GetItemRectMin();
 			bool gameViewMouseClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+			bool gameViewMouseDown = ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left);
 			mousePos = ImGui::GetMousePos();
-
-			ImGui::End();
-
 
 			//Berechne die Position der Maus relativ zum RenderTarget
 			ImVec2 relMousePos = { mousePos.x - offset.x, mousePos.y - offset.y };
 
 			static int16_t selectedIndex = -1;
-
+			int16_t clickedIndex = -1;
 			if (gameViewMouseClicked) {
 				Core::Logger::Debug("{} {}", relMousePos.x, relMousePos.y);
-				validIndex = 0;
-				for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-					if (gameObjects[i].type != GameObjectType::Invalid) validIndex++;
+				validIndex = objectCount;
+				for (int32_t i = maxGameObjects - 1; i >= 0 && validIndex >= 0; i--) {
+					if (gameObjects[i].type != GameObjectType::Invalid) validIndex--;
 					else continue;
 
-					if(relMousePos.x >= gameObjects[i].position.x && relMousePos.x <= gameObjects[i].position.x + gameObjects[i].size.x &&
-					   relMousePos.y >= gameObjects[i].position.y && relMousePos.y <= gameObjects[i].position.y + gameObjects[i].size.y) {
+					if (relMousePos.x >= gameObjects[i].position.x && relMousePos.x <= gameObjects[i].position.x + gameObjects[i].size.x &&
+						relMousePos.y >= gameObjects[i].position.y && relMousePos.y <= gameObjects[i].position.y + gameObjects[i].size.y) {
 						selectedIndex = i;
+						clickedIndex = i;
 						break;
 					}
 				}
 			}
+
+			if (m_DrawMode) {
+				//ImGui::
+				if (gameViewMouseDown && clickedIndex == -1) {
+					m_DrawObject.position.x = mousePos.x - offset.x;
+					m_DrawObject.position.y = mousePos.y - offset.y;
+
+					if (m_GridLock) {
+						m_DrawObject.position.x = std::floor(m_DrawObject.position.x / 32.0f) * 32.0f;
+						m_DrawObject.position.y = std::floor(m_DrawObject.position.y / 32.0f) * 32.0f;
+					}
+
+					m_GameLevel.addGameObject(m_DrawObject);
+					m_LevelSaved = false;
+				}
+			}
+
+			ImGui::End();
 
 
 			ImGui::Begin("ObjectList");
@@ -124,7 +198,7 @@ namespace Game {
 			if (ImGui::Button("Add Object")) {
 				GameObject defaultObj;
 				defaultObj.type = GameObjectType::Background;
-				defaultObj.position = { 200, 200 };
+				defaultObj.position = { 0, 0 };
 				defaultObj.size = { 32, 32 };
 				defaultObj.textureHandle = 1;
 
@@ -169,20 +243,9 @@ namespace Game {
 			ImGui::Begin("Object Properties");
 
 			if (selectedIndex != -1) {
-				DirectX::XMFLOAT2 oldPos = gameObjects[selectedIndex].position;
-				DirectX::XMFLOAT2 oldSize = gameObjects[selectedIndex].size;
-				uint32_t oldTex = gameObjects[selectedIndex].textureHandle;
-				
-				ImGui::SliderFloat2("Position", &gameObjects[selectedIndex].position.x, 0, 1280);
-				ImGui::SliderFloat2("Size", &gameObjects[selectedIndex].size.x, 0, 1280);
-				ImGui::InputInt("Texture Handle", (int*)&gameObjects[selectedIndex].textureHandle);
-
-				if (oldPos.x != gameObjects[selectedIndex].position.x || oldPos.y != gameObjects[selectedIndex].position.y ||
-					oldSize.x != gameObjects[selectedIndex].size.x || oldSize.y != gameObjects[selectedIndex].size.y ||
-					oldTex != gameObjects[selectedIndex].textureHandle) {
+				if (drawObjectProperties(gameObjects[selectedIndex], true)) {
 					m_LevelSaved = false;
 				}
-
 			}
 
 			ImGui::End();
@@ -220,7 +283,7 @@ namespace Game {
 		else {
 			ImGui::Begin("Game Instance");
 			auto textureHandle = renderer->getSRVGPUDescriptorHandle(m_Target->getSRVDescriptorIndex());
-			ImGui::Image((ImTextureID)(uintptr_t)textureHandle.ptr, ImVec2(m_Target->getSize().x / 2, m_Target->getSize().y / 2));
+			ImGui::Image((ImTextureID)(uintptr_t)textureHandle.ptr, ImVec2(m_Target->getSize().x, m_Target->getSize().y));
 			ImGui::End();
 
 			if (m_CloseApplication) {
@@ -271,7 +334,34 @@ namespace Game {
 			}
 		}
 
+		if (m_GameSettings.levelEditorMode) {
+			for (int x = 0; x < 1280; x += 32) {
+				renderer->submitLine({ (float)x, 0 }, { (float)x, 720 }, 0x6F829440);
+			}
+			for (int y = 0; y < 720; y += 32) {
+				renderer->submitLine({ 0, (float)y }, { 1280, (float)y }, 0x6F829440);
+			}
+		}
+
+		validIndex = 0;
+		if (m_GameSettings.showColliders) {
+			for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
+				if (gameObjects[i].type != GameObjectType::Invalid) validIndex++;
+				GameCollider* colliders = gameObjects[i].colliders.data();
+				for (uint8_t j = 0; j < gameObjects[i].colliderCount; j++) {
+					renderer->submitLine({ gameObjects[i].position.x + colliders[j].position.x, gameObjects[i].position.y + colliders[j].position.y }, { gameObjects[i].position.x + colliders[j].position.x + colliders[j].size.x, gameObjects[i].position.y + colliders[j].position.y }, 0x00FF00FF);
+					renderer->submitLine({ gameObjects[i].position.x + colliders[j].position.x + colliders[j].size.x, gameObjects[i].position.y + colliders[j].position.y }, { gameObjects[i].position.x + colliders[j].position.x + colliders[j].size.x, gameObjects[i].position.y + colliders[j].position.y + colliders[j].size.y }, 0x00FF00FF);
+					renderer->submitLine({ gameObjects[i].position.x + colliders[j].position.x + colliders[j].size.x, gameObjects[i].position.y + colliders[j].position.y + colliders[j].size.y }, { gameObjects[i].position.x + colliders[j].position.x, gameObjects[i].position.y + colliders[j].position.y + colliders[j].size.y }, 0x00FF00FF);
+					renderer->submitLine({ gameObjects[i].position.x + colliders[j].position.x, gameObjects[i].position.y + colliders[j].position.y + colliders[j].size.y }, { gameObjects[i].position.x + colliders[j].position.x, gameObjects[i].position.y + colliders[j].position.y }, 0x00FF00FF);
+				}
+			}
+		}
+
+		//renderer->submitLine({ 0, 0 }, { 1280, 720 }, 0xFFFFFFFF);
+
 		renderer->drawRects();
+		renderer->drawLines();
+
 		renderer->endRenderTarget(m_Target);
 
 	}
