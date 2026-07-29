@@ -6,8 +6,14 @@
 #include "Core/Logger.h"
 #include "Events/Callbacks.h"
 
+#include <cmath>
+
 
 namespace Game {
+
+	void keyboardCallback(Core::Window* window, int key, int scancode, int action, int mods) {
+		
+	}
 
 	GameInstance::GameInstance(GameSettings settings)
 		: m_GameSettings(settings)
@@ -17,6 +23,15 @@ namespace Game {
 
 		Core::Application::getApplication()->getEventSystem()->registerCallback<Events::WindowCloseCallback>(Events::EventType::WINDOW_CLOSE, [this](Core::Window * window) {
 			m_CloseApplication = true;
+		});
+
+		Core::Application::getApplication()->getEventSystem()->registerCallback<Events::KeyboardKeyCallback>(Events::EventType::KEYBOARD_KEY, [this](Core::Window* window, Events::KeyState c, Events::KeyboardKey key, int scancode) {
+			if(c == Events::KeyState::Down) {
+				Core::Logger::Debug("Key Pressed: {}", (int)key);
+			}
+			else if(c == Events::KeyState::Up) {
+				Core::Logger::Debug("Key Released: {}", (int)key);
+			}
 		});
 
 		m_DrawObject.type = GameObjectType::Background;
@@ -31,6 +46,7 @@ namespace Game {
 
 		ImGuiIO& io = ImGui::GetIO();
 		io.ConfigWindowsMoveFromTitleBarOnly = true;
+
 	}
 
 	GameInstance::~GameInstance()
@@ -50,9 +66,116 @@ namespace Game {
 		m_GameSettings = settings;
 	}
 
+	enum CollisionDirection {
+		None = 0,
+		Top = 1,
+		Bottom = 2,
+		Left = 3,
+		Right = 4
+	};
+
+	struct CollisionInfo {
+		bool hit;
+		CollisionDirection direction;
+		float overlap;
+	};
+
+	//AABB Kollisionsabfrage
+	CollisionInfo checkCollision(GameObject a, GameObject b) {
+		CollisionInfo info;
+		info.hit = false;
+		info.direction = CollisionDirection::None;
+		info.overlap = 0.0f;
+
+		for (uint8_t i = 0; i < a.colliderCount; i++) {
+			for (uint8_t j = 0; j < b.colliderCount; j++) {
+				GameCollider colliderA = a.colliders[i];
+				GameCollider colliderB = b.colliders[j];
+				float aPosX = colliderA.position.x + a.position.x;
+				float aPosY = colliderA.position.y + a.position.y;
+
+				float bPosX = colliderB.position.x + b.position.x;
+				float bPosY = colliderB.position.y + b.position.y;
+
+				Core::Logger::Debug("{} {} {} {}", aPosX, aPosY, bPosX, bPosY);
+				
+				if (aPosX < bPosX + colliderB.size.x &&
+					aPosX + colliderA.size.x > bPosX &&
+					aPosY < bPosY + colliderB.size.y &&
+					aPosY + colliderA.size.y > bPosY) {
+
+					info.hit = true;
+
+					float aCenterX = aPosX + colliderA.size.x / 2;
+					float aCenterY = aPosY + colliderA.size.y / 2;
+
+					float bCenterX = bPosX + colliderB.size.x / 2;
+					float bCenterY = bPosY + colliderB.size.y / 2;
+
+					float dx = aCenterX - bCenterX;
+					float dy = aCenterY - bCenterY;
+
+					float halfWidth = (colliderA.size.x + colliderB.size.x) * 0.5f;
+					float halfHeight = (colliderA.size.y + colliderB.size.y) * 0.5f;
+
+					float overlapX = halfWidth - std::abs(dx);
+					float overlapY = halfHeight - std::abs(dy);
+					
+					if (overlapX < overlapY) {
+						info.direction = (dx < 0.0f) ? CollisionDirection::Left : CollisionDirection::Right;
+						info.overlap = overlapX;
+						return info;
+					}
+					else {
+						info.direction = (dy < 0.0f) ? CollisionDirection::Bottom : CollisionDirection::Top;
+						info.overlap = overlapY;
+						return info;
+					}
+				}
+			}
+		}
+		return info;
+	}
+
 	void GameInstance::update(float deltaTime)
 	{
-		
+		if ((m_SimulationMode && !m_Paused) || !m_GameSettings.levelEditorMode) {
+			static int32_t playerID = -1;
+			if (playerID == -1) {
+				for (uint16_t i = 0; i < m_GameLevel.getGameObjectCount(); i++) {
+					if (m_GameLevel.getGameObjects()[i].type == GameObjectType::Player) {
+						playerID = i;
+						break;
+					}
+				}
+			}
+
+			uint16_t validIndex = 0;
+			for (uint16_t i = 0; i < m_GameLevel.getGameObjectCount(); i++) {
+				GameObject& obj = m_GameLevel.getGameObjects()[i];
+				if (!obj.isStatic) {
+					obj.physics.velocity.x += obj.physics.acceleration.x * deltaTime;
+					obj.physics.velocity.y += (m_Gravity + obj.physics.acceleration.y) * deltaTime;
+					
+					for (uint16_t j = 0; j < m_GameLevel.getGameObjectCount(); j++) {
+						if (j == i) continue;
+						CollisionInfo collision = checkCollision(obj, m_GameLevel.getGameObjects()[j]);
+						if (!collision.hit) continue;
+						if (collision.direction == CollisionDirection::Bottom) {
+							obj.physics.velocity.y = 0;
+							obj.position.y -= collision.overlap - 0.01f;
+						}
+
+					}
+
+
+					obj.position.x += obj.physics.velocity.x * deltaTime;
+					obj.position.y += obj.physics.velocity.y * deltaTime;
+
+				}
+			}
+
+		}
 	}
 
 	bool GameInstance::drawObjectProperties(GameObject& obj, bool pos) {
@@ -77,6 +200,14 @@ namespace Game {
 			}
 		}
 	
+		if (ImGui::Combo("Type", (int*)&obj.type, "Invalid\0Background\0Terrain\0Player\0")) {
+			modified += 1;
+		}
+
+		if (ImGui::Checkbox("Static", &obj.isStatic)) {
+			modified += 1;
+		}
+
 		modified += ImGui::InputInt("Texture Handle", (int*)&obj.textureHandle);
 		if (ImGui::TreeNodeEx("Colliders", ImGuiTreeNodeFlags_DefaultOpen, "Colliders (%d)", obj.colliderCount)) {
 			for (uint32_t i = 0; i < obj.colliderCount; i++) {
@@ -105,6 +236,33 @@ namespace Game {
 
 			std::string levelPathStr = currentSettings.levelPath.string();
 			ImGui::Text("Level Editor");
+
+			if (m_SimulationMode) {
+				if (ImGui::Button(m_Paused ? "Resume Simulation" : "Pause Simulation")) {
+					m_Paused = !m_Paused;
+				}
+
+				ImGui::SameLine();
+
+				if (ImGui::Button("Reset Simulation")) {
+					m_GameLevel = m_SavedLevel;
+				}
+
+				ImGui::SameLine();
+
+				if(ImGui::Button("Stop Simulation")) {
+					m_GameLevel = m_SavedLevel;
+					m_SimulationMode = false;
+					
+				}
+			}
+			else {
+				if (ImGui::Button("Start Simulation")) {
+					m_GameLevel.optimizeLevel();
+					m_SavedLevel = m_GameLevel;
+					m_SimulationMode = true;
+				}
+			}
 
 			ImGui::Checkbox("Grid Lock", &m_GridLock);
 			ImGui::Checkbox("Draw Mode", &m_DrawMode);
@@ -149,16 +307,16 @@ namespace Game {
 			auto textureHandle = renderer->getSRVGPUDescriptorHandle(m_Target->getSRVDescriptorIndex());
 			ImGui::Image((ImTextureID)(uintptr_t)textureHandle.ptr, ImVec2(m_Target->getSize().x, m_Target->getSize().y));
 			ImVec2 offset = ImGui::GetItemRectMin();
-			bool gameViewMouseClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
-			bool gameViewMouseDown = ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left);
+			bool gameViewLeftMouseDown = ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left);
+			bool gameViewRightMouseDown = ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Right);
 			mousePos = ImGui::GetMousePos();
 
 			//Berechne die Position der Maus relativ zum RenderTarget
 			ImVec2 relMousePos = { mousePos.x - offset.x, mousePos.y - offset.y };
 
-			static int16_t selectedIndex = -1;
-			int16_t clickedIndex = -1;
-			if (gameViewMouseClicked) {
+			static int32_t selectedIndex = -1;
+			int32_t clickedIndex = -1;
+			if (gameViewLeftMouseDown || gameViewRightMouseDown) {
 				Core::Logger::Debug("{} {}", relMousePos.x, relMousePos.y);
 				validIndex = objectCount;
 				for (int32_t i = maxGameObjects - 1; i >= 0 && validIndex >= 0; i--) {
@@ -167,7 +325,7 @@ namespace Game {
 
 					if (relMousePos.x >= gameObjects[i].position.x && relMousePos.x <= gameObjects[i].position.x + gameObjects[i].size.x &&
 						relMousePos.y >= gameObjects[i].position.y && relMousePos.y <= gameObjects[i].position.y + gameObjects[i].size.y) {
-						selectedIndex = i;
+						if(gameViewLeftMouseDown) selectedIndex = i;
 						clickedIndex = i;
 						break;
 					}
@@ -176,7 +334,8 @@ namespace Game {
 
 			if (m_DrawMode) {
 				//ImGui::
-				if (gameViewMouseDown && clickedIndex == -1) {
+				if (gameViewLeftMouseDown && clickedIndex == -1) {
+					
 					m_DrawObject.position.x = mousePos.x - offset.x;
 					m_DrawObject.position.y = mousePos.y - offset.y;
 
@@ -186,6 +345,11 @@ namespace Game {
 					}
 
 					m_GameLevel.addGameObject(m_DrawObject);
+					m_LevelSaved = false;
+				}
+				if (gameViewRightMouseDown && clickedIndex != -1) {
+					m_GameLevel.removeGameObject(clickedIndex);
+					selectedIndex = -1;
 					m_LevelSaved = false;
 				}
 			}
@@ -210,12 +374,14 @@ namespace Game {
 				m_LevelSaved = false;
 			}
 
+			objectCount = m_GameLevel.getGameObjectCount();
+
 			validIndex = 0;
 			if (ImGui::TreeNodeEx("GameObjects", ImGuiTreeNodeFlags_DefaultOpen, "GameObjects (%d)", objectCount)) {
 
 				for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-					if (gameObjects[i].type != GameObjectType::Invalid) validIndex++;
-					else continue;
+					if (gameObjects[i].type == GameObjectType::Invalid) continue;
+					validIndex++;
 
 					ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
 					if (selectedIndex == i) nodeFlags |= ImGuiTreeNodeFlags_Selected;
@@ -306,8 +472,8 @@ namespace Game {
 		uint16_t validIndex = 0;
 		//Hintergrund -> Terrain -> Spieler //TODO: Z-Layer im Renderer
 		for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-			if (gameObjects[i].type != GameObjectType::Invalid) validIndex++;
-			else continue;
+			if (gameObjects[i].type == GameObjectType::Invalid) continue;
+			validIndex++;
 
 			if (gameObjects[i].type == GameObjectType::Background) {
 				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, gameObjects[i].textureHandle);
@@ -316,8 +482,8 @@ namespace Game {
 
 		validIndex = 0;
 		for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-			if (gameObjects[i].type != GameObjectType::Invalid) validIndex++;
-			else continue;
+			if (gameObjects[i].type == GameObjectType::Invalid) continue;
+			validIndex++;
 
 			if (gameObjects[i].type == GameObjectType::Terrain) {
 				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, gameObjects[i].textureHandle);
@@ -326,8 +492,8 @@ namespace Game {
 
 		validIndex = 0;
 		for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-			if (gameObjects[i].type != GameObjectType::Invalid) validIndex++;
-			else continue;
+			if (gameObjects[i].type == GameObjectType::Invalid) continue;
+			validIndex++;
 
 			if (gameObjects[i].type == GameObjectType::Player) {
 				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, gameObjects[i].textureHandle);
@@ -346,7 +512,8 @@ namespace Game {
 		validIndex = 0;
 		if (m_GameSettings.showColliders) {
 			for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-				if (gameObjects[i].type != GameObjectType::Invalid) validIndex++;
+				if (gameObjects[i].type == GameObjectType::Invalid) continue;
+				validIndex++;
 				GameCollider* colliders = gameObjects[i].colliders.data();
 				for (uint8_t j = 0; j < gameObjects[i].colliderCount; j++) {
 					renderer->submitLine({ gameObjects[i].position.x + colliders[j].position.x, gameObjects[i].position.y + colliders[j].position.y }, { gameObjects[i].position.x + colliders[j].position.x + colliders[j].size.x, gameObjects[i].position.y + colliders[j].position.y }, 0x00FF00FF);

@@ -20,6 +20,8 @@ namespace Game {
 		void loadLevel(std::filesystem::path levelPath);
 		void saveLevel(std::filesystem::path levelPath);
 
+		void optimizeLevel();
+
 		std::array<GameObject, maxGameObjects>& getGameObjects() { return m_GameObjects; }
 		uint16_t getGameObjectCount() { return m_ObjectCount; };
 	private:

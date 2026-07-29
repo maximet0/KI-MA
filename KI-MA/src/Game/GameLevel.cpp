@@ -54,17 +54,25 @@ namespace Game {
 	void GameLevel::saveLevel(std::filesystem::path levelPath)
 	{
 		std::fstream file(levelPath, std::ios::out | std::ios::binary);
-		GameObject* gameObjects = new GameObject[m_LastFreeIndex];
+		optimizeLevel();
 
+		file.write(reinterpret_cast<char*>(m_GameObjects.data()), m_ObjectCount * sizeof(GameObject));
+	}
+
+	void GameLevel::optimizeLevel()
+	{
+		GameObject* gameObjects = new GameObject[m_LastFreeIndex];
 		uint16_t validIndex = 0;
 		for (uint16_t i = 0; i < m_LastFreeIndex; i++) {
 			if (m_GameObjects[i].type == GameObjectType::Invalid) continue;
-
 			gameObjects[validIndex] = m_GameObjects[i];
 			validIndex++;
 		}
-
-		file.write(reinterpret_cast<char*>(gameObjects), validIndex * sizeof(GameObject));
+		memset(m_GameObjects.data(), 0, maxGameObjects * sizeof(GameObject));
+		memcpy(m_GameObjects.data(), gameObjects, validIndex * sizeof(GameObject));
+		m_ObjectCount = validIndex;
+		m_LastFreeIndex = validIndex;
+		m_FreeSlots.clear();
 		delete[] gameObjects;
 	}
 
