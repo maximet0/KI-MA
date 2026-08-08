@@ -46,7 +46,7 @@ namespace Game {
 		bool m_DrawMode = false;
 		GameObject m_DrawObject;
 
-		constexpr static float m_Gravity = 9.81f * 32;
+		constexpr static float m_Gravity = 9.81f * 64;
 	};
 
 }

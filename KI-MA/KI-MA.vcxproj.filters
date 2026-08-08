@@ -78,6 +78,9 @@
     <ClCompile Include="src\Game\GameLevel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Game\GamePhysics.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Core\Application.h">
@@ -155,11 +158,19 @@
     <ClInclude Include="src\Game\GameObject.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Game\GamePhysics.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\Shaders\VertexShader.hlsl" />
     <FxCompile Include="res\Shaders\PixelShader.hlsl" />
     <FxCompile Include="res\Shaders\LineVertexShader.hlsl" />
     <FxCompile Include="res\Shaders\LinePixelShader.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="C:\Users\maxim\Downloads\BOX-1.png.png">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

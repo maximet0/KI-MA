@@ -5,15 +5,14 @@
 #include "external/ImGui/ImGui.h"
 #include "Core/Logger.h"
 #include "Events/Callbacks.h"
+#include "GamePhysics.h"
 
 #include <cmath>
 
 
 namespace Game {
 
-	void keyboardCallback(Core::Window* window, int key, int scancode, int action, int mods) {
-		
-	}
+	bool keyDown[256] = { false };
 
 	GameInstance::GameInstance(GameSettings settings)
 		: m_GameSettings(settings)
@@ -27,10 +26,12 @@ namespace Game {
 
 		Core::Application::getApplication()->getEventSystem()->registerCallback<Events::KeyboardKeyCallback>(Events::EventType::KEYBOARD_KEY, [this](Core::Window* window, Events::KeyState c, Events::KeyboardKey key, int scancode) {
 			if(c == Events::KeyState::Down) {
-				Core::Logger::Debug("Key Pressed: {}", (int)key);
+				keyDown[(int)key] = true;
+				//Core::Logger::Debug("Key Pressed: {}", (int)key);
 			}
 			else if(c == Events::KeyState::Up) {
-				Core::Logger::Debug("Key Released: {}", (int)key);
+				keyDown[(int)key] = false;
+				//Core::Logger::Debug("Key Released: {}", (int)key);
 			}
 		});
 
@@ -39,9 +40,8 @@ namespace Game {
 		m_DrawObject.size = { 32, 32 };
 		m_DrawObject.textureHandle = 1;
 
-		m_DrawObject.colliders[0].position = { 0, 0 };
-		m_DrawObject.colliders[0].size = { 32, 32 };
-		m_DrawObject.colliderCount = 1;
+		m_DrawObject.collider.position = { 0, 0 };
+		m_DrawObject.collider.size = { 32, 32 };
 
 
 		ImGuiIO& io = ImGui::GetIO();
@@ -66,22 +66,8 @@ namespace Game {
 		m_GameSettings = settings;
 	}
 
-	enum CollisionDirection {
-		None = 0,
-		Top = 1,
-		Bottom = 2,
-		Left = 3,
-		Right = 4
-	};
-
-	struct CollisionInfo {
-		bool hit;
-		CollisionDirection direction;
-		float overlap;
-	};
-
 	//AABB Kollisionsabfrage
-	CollisionInfo checkCollision(GameObject a, GameObject b) {
+	/*CollisionInfo checkCollision(GameObject a, GameObject b) {
 		CollisionInfo info;
 		info.hit = false;
 		info.direction = CollisionDirection::None;
@@ -97,7 +83,7 @@ namespace Game {
 				float bPosX = colliderB.position.x + b.position.x;
 				float bPosY = colliderB.position.y + b.position.y;
 
-				Core::Logger::Debug("{} {} {} {}", aPosX, aPosY, bPosX, bPosY);
+				//Core::Logger::Debug("{} {} {} {}", aPosX, aPosY, bPosX, bPosY);
 				
 				if (aPosX < bPosX + colliderB.size.x &&
 					aPosX + colliderA.size.x > bPosX &&
@@ -135,7 +121,14 @@ namespace Game {
 			}
 		}
 		return info;
-	}
+	}*/
+
+	float maxSpeed = 250.0f;
+	float acceleration = 1500.0f;
+	float deceleration = 2000.0f;
+	float jumpForce = 300.0f;
+
+	float gracePeriod = 0.1f;
 
 	void GameInstance::update(float deltaTime)
 	{
@@ -150,38 +143,108 @@ namespace Game {
 				}
 			}
 
+			static bool grounded = false;
+
+			if (playerID != -1) {
+				GameObject& player = m_GameLevel.getGameObjects()[playerID];
+				player.physics.acceleration.x = 0.0f;
+
+
+				if (keyDown[(int)Events::KeyboardKey::Key_W] && (grounded || gracePeriod > 0.0f)) {
+					player.physics.velocity.y = -jumpForce;
+				}
+				if (keyDown[(int)Events::KeyboardKey::Key_A]) {
+					player.physics.acceleration.x = -acceleration;
+				}
+				else if (keyDown[(int)Events::KeyboardKey::Key_D]) {
+					player.physics.acceleration.x = acceleration;
+				}
+				else {
+					if (player.physics.velocity.x > 0.0f) {
+						player.physics.acceleration.x -= deceleration;
+					}
+					else if (player.physics.velocity.x < 0.0f) {
+						player.physics.acceleration.x += deceleration;
+					}
+				}
+
+
+				if (!keyDown[(int)Events::KeyboardKey::Key_A] && !keyDown[(int)Events::KeyboardKey::Key_D])
+				{
+					if (std::abs(player.physics.velocity.x) < deceleration * deltaTime)
+						player.physics.velocity.x = 0;
+				}
+
+				player.physics.velocity.x = std::clamp(player.physics.velocity.x, -maxSpeed, maxSpeed);
+
+
+			}
+
+			GamePhysics::updatePhysics(m_GameLevel, deltaTime, m_Gravity);
+
+			if (playerID != -1) {
+				//Ground Check
+				GameObject& player = m_GameLevel.getGameObjects()[playerID];
+				for (uint16_t i = 0; i < 16; i++) {
+					float xPos = player.position.x + (player.size.x / 16) * i;
+					RaycastHit hit = GamePhysics::raycast(m_GameLevel, { xPos, player.position.y + player.size.y + 0.02f }, { 0, 1 }, 5.0f);
+					grounded = hit.hit;
+					if (grounded) {
+						gracePeriod = 0.1f;
+						break;
+					}
+				}
+				
+				if(!grounded) gracePeriod -= deltaTime;
+				
+			}
+			
+
+			/*grounded = false;
 			uint16_t validIndex = 0;
 			for (uint16_t i = 0; i < m_GameLevel.getGameObjectCount(); i++) {
 				GameObject& obj = m_GameLevel.getGameObjects()[i];
 				if (!obj.isStatic) {
+
+					//obj.physics.velocity.x *= 0.9f;
 					obj.physics.velocity.x += obj.physics.acceleration.x * deltaTime;
 					obj.physics.velocity.y += (m_Gravity + obj.physics.acceleration.y) * deltaTime;
-					
+
+					obj.position.x += obj.physics.velocity.x * deltaTime;
+					obj.position.y += obj.physics.velocity.y * deltaTime;
+
 					for (uint16_t j = 0; j < m_GameLevel.getGameObjectCount(); j++) {
 						if (j == i) continue;
 						CollisionInfo collision = checkCollision(obj, m_GameLevel.getGameObjects()[j]);
 						if (!collision.hit) continue;
 						if (collision.direction == CollisionDirection::Bottom) {
 							obj.physics.velocity.y = 0;
-							obj.position.y -= collision.overlap - 0.01f;
+							obj.position.y -= collision.overlap;
+							if(i == playerID) grounded = true;
 						}
-
+						else if (collision.direction == CollisionDirection::Left) {
+							obj.physics.velocity.x = 0;
+							obj.position.x -= collision.overlap;
+						}
+						else if (collision.direction == CollisionDirection::Right) {
+							obj.physics.velocity.x = 0;
+							obj.position.x += collision.overlap;
+						}
+						else if (collision.direction == CollisionDirection::Top) {
+							obj.physics.velocity.y = 0;
+							obj.position.y += collision.overlap;
+						}
 					}
 
 
-					obj.position.x += obj.physics.velocity.x * deltaTime;
-					obj.position.y += obj.physics.velocity.y * deltaTime;
-
 				}
-			}
+			}*/
 
 		}
 	}
 
 	bool GameInstance::drawObjectProperties(GameObject& obj, bool pos) {
 		int modified = 0;
-
-
 		if (pos) {
 			if (ImGui::DragFloat2("Position", &obj.position.x, m_GridLock ? 8.0f : 1.0f) ) {
 				modified += 1;
@@ -209,15 +272,12 @@ namespace Game {
 		}
 
 		modified += ImGui::InputInt("Texture Handle", (int*)&obj.textureHandle);
-		if (ImGui::TreeNodeEx("Colliders", ImGuiTreeNodeFlags_DefaultOpen, "Colliders (%d)", obj.colliderCount)) {
-			for (uint32_t i = 0; i < obj.colliderCount; i++) {
-				if (ImGui::TreeNodeEx((void*)(intptr_t)i, ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen, "Collider %d", i)) {
-					modified += ImGui::DragFloat2("Position", &obj.colliders[i].position.x, 0.5f);
-					modified += ImGui::DragFloat2("Size", &obj.colliders[i].size.x, 0.5f);
-				}
-			}
-			ImGui::TreePop();
-		}
+
+		ImGui::Text("Collider Properties");
+		ImGui::PushID("Collider");
+		modified += ImGui::DragFloat2("Position", &obj.collider.position.x, 0.5f);
+		modified += ImGui::DragFloat2("Size", &obj.collider.size.x, 0.5f);
+		ImGui::PopID();
 
 		return modified > 0;
 	}
@@ -317,7 +377,7 @@ namespace Game {
 			static int32_t selectedIndex = -1;
 			int32_t clickedIndex = -1;
 			if (gameViewLeftMouseDown || gameViewRightMouseDown) {
-				Core::Logger::Debug("{} {}", relMousePos.x, relMousePos.y);
+				//Core::Logger::Debug("{} {}", relMousePos.x, relMousePos.y);
 				validIndex = objectCount;
 				for (int32_t i = maxGameObjects - 1; i >= 0 && validIndex >= 0; i--) {
 					if (gameObjects[i].type != GameObjectType::Invalid) validIndex--;
@@ -366,9 +426,8 @@ namespace Game {
 				defaultObj.size = { 32, 32 };
 				defaultObj.textureHandle = 1;
 
-				defaultObj.colliders[0].position = { 0, 0 };
-				defaultObj.colliders[0].size = { 32, 32 };
-				defaultObj.colliderCount = 1;
+				defaultObj.collider.position = { 0, 0 };
+				defaultObj.collider.size = { 32, 32 };
 
 				m_GameLevel.addGameObject(defaultObj);
 				m_LevelSaved = false;
@@ -514,13 +573,10 @@ namespace Game {
 			for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
 				if (gameObjects[i].type == GameObjectType::Invalid) continue;
 				validIndex++;
-				GameCollider* colliders = gameObjects[i].colliders.data();
-				for (uint8_t j = 0; j < gameObjects[i].colliderCount; j++) {
-					renderer->submitLine({ gameObjects[i].position.x + colliders[j].position.x, gameObjects[i].position.y + colliders[j].position.y }, { gameObjects[i].position.x + colliders[j].position.x + colliders[j].size.x, gameObjects[i].position.y + colliders[j].position.y }, 0x00FF00FF);
-					renderer->submitLine({ gameObjects[i].position.x + colliders[j].position.x + colliders[j].size.x, gameObjects[i].position.y + colliders[j].position.y }, { gameObjects[i].position.x + colliders[j].position.x + colliders[j].size.x, gameObjects[i].position.y + colliders[j].position.y + colliders[j].size.y }, 0x00FF00FF);
-					renderer->submitLine({ gameObjects[i].position.x + colliders[j].position.x + colliders[j].size.x, gameObjects[i].position.y + colliders[j].position.y + colliders[j].size.y }, { gameObjects[i].position.x + colliders[j].position.x, gameObjects[i].position.y + colliders[j].position.y + colliders[j].size.y }, 0x00FF00FF);
-					renderer->submitLine({ gameObjects[i].position.x + colliders[j].position.x, gameObjects[i].position.y + colliders[j].position.y + colliders[j].size.y }, { gameObjects[i].position.x + colliders[j].position.x, gameObjects[i].position.y + colliders[j].position.y }, 0x00FF00FF);
-				}
+				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, 0x00FF00FF);
+				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, 0x00FF00FF);
+				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, 0x00FF00FF);
+				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, 0x00FF00FF);
 			}
 		}
 

@@ -113,6 +113,7 @@
     <ClCompile Include="src\Events\EventSystem.cpp" />
     <ClCompile Include="src\Game\GameInstance.cpp" />
     <ClCompile Include="src\Game\GameLevel.cpp" />
+    <ClCompile Include="src\Game\GamePhysics.cpp" />
     <ClCompile Include="src\Graphics\GraphicsContext.cpp" />
     <ClCompile Include="src\Core\Window.cpp" />
     <ClCompile Include="src\Graphics\GraphicsPipeline.cpp" />
@@ -140,6 +141,7 @@
     <ClInclude Include="src\Game\GameInstance.h" />
     <ClInclude Include="src\Game\GameLevel.h" />
     <ClInclude Include="src\Game\GameObject.h" />
+    <ClInclude Include="src\Game\GamePhysics.h" />
     <ClInclude Include="src\Graphics\GraphicsContext.h" />
     <ClInclude Include="src\Core\Window.h" />
     <ClInclude Include="src\Graphics\GraphicsPipeline.h" />
@@ -180,6 +182,9 @@
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">6.8</ShaderModel>
     </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="C:\Users\maxim\Downloads\BOX-1.png.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
