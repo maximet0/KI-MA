@@ -12,7 +12,7 @@ namespace Game {
 		auto& gameObjects = level.getGameObjects();
 		for (uint32_t i = 0; i < level.getGameObjectCount(); i++) {
 			GameObject& obj = gameObjects[i];
-			if (obj.type == GameObjectType::Invalid) continue;
+			if ((obj.flags & GameObjectFlags::Valid) == 0 || (obj.flags & GameObjectFlags::Trigger) != 0) continue;
 			GameCollider& collider = obj.collider;
 			DirectX::XMFLOAT2 colliderPos = { obj.position.x + collider.position.x, obj.position.y + collider.position.y };
 			DirectX::XMFLOAT2 colliderSize = collider.size;
@@ -35,14 +35,14 @@ namespace Game {
 
 	RaycastHit GamePhysics::raycast(GameLevel& level, const DirectX::XMFLOAT2& origin, const DirectX::XMFLOAT2& direction, float maxDistance)
 	{
-
+		
 		float stepSize = 0.25f;
 		
 		//Alle GameObjects im Level durchgehen und prüfen, ob sie mit dem Raycast kollidieren.
 		auto& gameObjects = level.getGameObjects();
 		for (uint32_t i = 0; i < level.getGameObjectCount(); i++) {
 			GameObject& obj = gameObjects[i];
-			if (obj.type == GameObjectType::Invalid) continue;
+			if ((obj.flags & GameObjectFlags::Valid) == 0 || (obj.flags & GameObjectFlags::Trigger) != 0) continue;
 			GameCollider& collider = obj.collider;
 			DirectX::XMFLOAT2 colliderPos = { obj.position.x + collider.position.x, obj.position.y + collider.position.y };
 			DirectX::XMFLOAT2 colliderSize = collider.size;
@@ -71,7 +71,7 @@ namespace Game {
 		// Alle GameObjects durchgehen und die Physik anwenden
 		for (uint16_t i = 0; i < level.getGameObjectCount(); i++) {
 			GameObject& a = gameObjects[i];
-			if (a.isStatic || a.type == GameObjectType::Invalid) continue;
+			if ((a.flags & GameObjectFlags::Static) != 0 || (a.flags & GameObjectFlags::Valid) == 0) continue;
 
 			// Beschleunigungen anwenden
 			a.physics.velocity.x += a.physics.acceleration.x * deltaTime;
@@ -82,14 +82,27 @@ namespace Game {
 
 			// Kollisionen auf der X-Achse prüfen
 			for (uint16_t j = 0; j < level.getGameObjectCount(); j++) {
-				if (j == i || gameObjects[j].type == GameObjectType::Invalid) continue;
+				if ((gameObjects[j].flags & GameObjectFlags::Valid) == 0) continue;
+
 				GameObject& b = gameObjects[j];
+				if (checkCollision(a.collider, a, b.collider, b)) {
+					if (b.flags & GameObjectFlags::Static) {
+						if (b.flags & GameObjectFlags::Trigger) {
+							for (TriggerInfo& trig : b.triggers) {
+								if (trig.type == TriggerType::None) continue;
+								if(trig.activationState != TriggerActivationState::Finished) trig.insideTrigger = true;
+								
+							}
+							continue;
+						}
+					}
+				}
 
 				GameCollider& colliderA = a.collider;
 				GameCollider& colliderB = b.collider;
 				float deltaX = checkCollisionX(colliderA, a, colliderB, b);
 				if (deltaX != 0.0f) {
-					if (b.isStatic) {
+					if (b.flags & GameObjectFlags::Static) {
 						a.position.x += deltaX;
 						a.physics.velocity.x = 0.0f;
 					}
@@ -117,16 +130,18 @@ namespace Game {
 
 			// Kollisionen auf der Y-Achse prüfen
 			for (uint16_t j = 0; j < level.getGameObjectCount(); j++) {
-				if (j == i || gameObjects[j].type == GameObjectType::Invalid) continue;
+				if (j == i || (gameObjects[j].flags & GameObjectFlags::Valid) == 0) continue;
 				GameObject& b = gameObjects[j];
 
 				GameCollider& colliderA = a.collider;
 				GameCollider& colliderB = b.collider;
 				float deltaY = checkCollisionY(colliderA, a, colliderB, b);
 				if (deltaY != 0.0f) {
-					if (b.isStatic) {
-						a.position.y += deltaY;
-						a.physics.velocity.y = 0.0f;
+					if (b.flags & GameObjectFlags::Static) {
+						if ((b.flags & GameObjectFlags::Trigger) == 0) {
+							a.position.y += deltaY;
+							a.physics.velocity.y = 0.0f;
+						}
 					}
 					else {
 						float pushMash = b.physics.mass;
@@ -151,9 +166,22 @@ namespace Game {
 		}
 	}
 
+
+	bool GamePhysics::checkCollision(const GameCollider& a, const GameObject& aObj, const GameCollider& b, const GameObject& bObj)
+	{
+		DirectX::XMFLOAT2 aPos = { a.position.x + aObj.position.x, a.position.y + aObj.position.y };
+		DirectX::XMFLOAT2 bPos = { b.position.x + bObj.position.x, b.position.y + bObj.position.y };
+
+		if (aPos.x < bPos.x + b.size.x && aPos.x + a.size.x > bPos.x &&
+			aPos.y < bPos.y + b.size.y && aPos.y + a.size.y > bPos.y) {
+			return true;
+		}
+
+		return false;
+	}
+
 	//Toleranz Probleme bei den kollisionen zu vermeiden.
 	constexpr float tolerance = 1.0f;
-
 
 	float GamePhysics::checkCollisionX(const GameCollider& a, const GameObject& aObj, const GameCollider& b, const GameObject& bObj)
 	{
@@ -173,8 +201,8 @@ namespace Game {
 			// Berechne die Überlappung in X-Richtung
 			float overlap = halfWidth - std::abs(dx);
 			// Nur wenn sich das Objekt in die Richtung bewegt, sollte eine Kollision erkannt werden.
-			if (aObj.physics.velocity.x > 0.0f && dx < 0.0f) return -overlap;
-			else if (aObj.physics.velocity.x < 0.0f && dx > 0.0f) return overlap;
+			if (dx < 0.0f) return -overlap;
+			else if (dx > 0.0f) return overlap;
 			else return 0.0f;
 		}
 
@@ -241,7 +269,7 @@ namespace Game {
 		if (hit.hit) {
 			GameObject* obj = hit.object;
 			// Wenn das nächste Objekt statisch ist, sollte die Kette nicht verschoben werden können.
-			if (obj->isStatic) canMove = false;
+			if (obj->flags & GameObjectFlags::Static) canMove = false;
 			else {
 				// Masse des Objekts zur Gesamtmasse hinzufügen und rekursiv prüfen, ob das nächste Objekt in der Kette verschoben werden kann.
 				totalMass += obj->physics.mass;

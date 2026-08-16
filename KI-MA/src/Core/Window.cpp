@@ -113,6 +113,23 @@ namespace Core {
 		{
 			Events::KeyboardKey key = static_cast<Events::KeyboardKey>(wParam);
 			int scancode = static_cast<int>(LOBYTE(HIWORD(lParam)));
+
+			if (key == VK_SHIFT) {
+				if (scancode == MapVirtualKey(VK_LSHIFT, MAPVK_VK_TO_VSC)) key = Events::KeyboardKey::Key_LSHIFT;
+				else if(scancode == MapVirtualKey(VK_RSHIFT, MAPVK_VK_TO_VSC)) key = Events::KeyboardKey::Key_RSHIFT;
+			}
+
+			BOOL extended = (lParam >> 24) & 1; // R / L
+			
+			if (key == VK_CONTROL) {
+				if(extended)  key = Events::KeyboardKey::Key_RCONTROL;
+				else  key = Events::KeyboardKey::Key_LCONTROL;
+			}
+			else if (key == VK_MENU) {
+				if (extended)  key = Events::KeyboardKey::Key_RALT;
+				else  key = Events::KeyboardKey::Key_LALT;
+			}
+
 			app->getEventSystem()->registerEvent(new Events::KeyboardKeyEvent(window, Events::KeyState::Down, key, scancode));
 			return 0;
 		}
@@ -121,6 +138,24 @@ namespace Core {
 		{
 			Events::KeyboardKey key = static_cast<Events::KeyboardKey>(wParam);
 			int scancode = static_cast<int>(LOBYTE(HIWORD(lParam)));
+
+			if (key == VK_SHIFT) {
+				if (scancode == MapVirtualKey(VK_LSHIFT, MAPVK_VK_TO_VSC)) key = Events::KeyboardKey::Key_LSHIFT;
+				else if (scancode == MapVirtualKey(VK_RSHIFT, MAPVK_VK_TO_VSC)) key = Events::KeyboardKey::Key_RSHIFT;
+			}
+
+			BOOL extended = (lParam >> 24) & 1; // R / L
+
+			if (key == VK_CONTROL) {
+				if (extended)  key = Events::KeyboardKey::Key_RCONTROL;
+				else  key = Events::KeyboardKey::Key_LCONTROL;
+			}
+			else if (key == VK_MENU) {
+				if (extended)  key = Events::KeyboardKey::Key_RALT;
+				else  key = Events::KeyboardKey::Key_LALT;
+			}
+
+
 			app->getEventSystem()->registerEvent(new Events::KeyboardKeyEvent(window, Events::KeyState::Up, key, scancode));
 			return 0;
 		}

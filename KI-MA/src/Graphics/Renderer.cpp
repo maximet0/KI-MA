@@ -285,9 +285,6 @@ namespace Graphics {
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuf;
 	Microsoft::WRL::ComPtr<ID3D12Resource> indexBuf;
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> constantBuf;
-	void* constBufPtr;
-
 	void Renderer::drawRects() {
 		Core::Application* app = Core::Application::getApplication();
 		Graphics::GraphicsContext* context = app->getGraphicsContext();
@@ -308,8 +305,6 @@ namespace Graphics {
 			vertexBuf = createBuffer(sizeof(vertices), D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
 			indexBuf = createBuffer(sizeof(indices), D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
 
-			constantBuf = createBuffer(sizeof(DirectX::XMMATRIX), D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
-
 			void* mappedData;
 			vertexBuf->Map(0, nullptr, &mappedData);
 			memcpy(mappedData, vertices, sizeof(vertices));
@@ -318,22 +313,11 @@ namespace Graphics {
 			indexBuf->Map(0, nullptr, &mappedData);
 			memcpy(mappedData, indices, sizeof(indices));
 			indexBuf->Unmap(0, nullptr);
-
-			constantBuf->Map(0, nullptr, &constBufPtr);
 		}
-
-
-		DirectX::XMMATRIX cameraView = DirectX::XMMatrixIdentity();
-		DirectX::XMMATRIX cameraProjection = DirectX::XMMatrixOrthographicOffCenterLH(0.0f, (float)m_CurrentRenderTarget->getSize().x, (float)m_CurrentRenderTarget->getSize().y, 0.0f, 0.0f, 1.0f);
-
-		DirectX::XMMATRIX mvp = cameraView * cameraProjection;
-
-		memcpy(constBufPtr, &mvp, sizeof(DirectX::XMMATRIX));
-
 
 		m_DefaultPipeline.usePipeline(m_CmdList);
 
-		m_CmdList->SetGraphicsRootConstantBufferView(0, constantBuf->GetGPUVirtualAddress());
+		m_CmdList->SetGraphicsRootConstantBufferView(0, m_CurrentVPBuf->GetGPUVirtualAddress());
 		m_CmdList->SetGraphicsRootShaderResourceView(1, m_RectDataBuf->GetGPUVirtualAddress());
 
 
@@ -358,11 +342,9 @@ namespace Graphics {
 
 	void Renderer::drawLines()
 	{
-		//TODO: Correct Camera
-
 		m_LinePipeline.usePipeline(m_CmdList);
 
-		m_CmdList->SetGraphicsRootConstantBufferView(0, constantBuf->GetGPUVirtualAddress());
+		m_CmdList->SetGraphicsRootConstantBufferView(0, m_CurrentVPBuf->GetGPUVirtualAddress());
 
 		D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
 		vertexBufferView.BufferLocation = m_LineDataBuf->GetGPUVirtualAddress();
@@ -446,7 +428,7 @@ namespace Graphics {
 		
 	}
 
-	void Renderer::beginRenderTarget(RenderTarget* renderTarget)
+	void Renderer::beginRenderTarget(RenderTarget* renderTarget, DirectX::XMFLOAT2 cameraPosition, float cameraZoom)
 	{
 		Core::Application* app = Core::Application::getApplication();
 		uint32_t frameIndex = app->getSwapchain()->getBackBufferIndex();
@@ -476,6 +458,17 @@ namespace Graphics {
 
 		m_CurrentRenderTarget = renderTarget;
 
+		m_CurrentVPBuf = createBuffer(sizeof(DirectX::XMMATRIX), D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+
+		DirectX::XMMATRIX cameraView = DirectX::XMMatrixTranslation(-cameraPosition.x, -cameraPosition.y, 0.0f);
+		cameraView = cameraView * DirectX::XMMatrixScaling(cameraZoom, cameraZoom, 1.0f) ;
+		DirectX::XMMATRIX cameraProj = DirectX::XMMatrixOrthographicOffCenterLH(-(float)renderTarget->getSize().x * 0.5f, (float)renderTarget->getSize().x * 0.5f, (float)renderTarget->getSize().y * 0.5f, -(float)renderTarget->getSize().y * 0.5f, 0.0f, 1.0f);
+		DirectX::XMMATRIX cameraVP = cameraView * cameraProj;
+
+		void* mappedData;
+		m_CurrentVPBuf->Map(0, nullptr, &mappedData);
+		memcpy(mappedData, &cameraVP, sizeof(DirectX::XMMATRIX));
+		m_CurrentVPBuf->Unmap(0, nullptr);
 	}
 
 	void Renderer::endRenderTarget(RenderTarget* renderTarget)

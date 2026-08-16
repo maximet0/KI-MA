@@ -9,14 +9,14 @@
 namespace Graphics {
 	class RenderTarget {
 	public:
-		RenderTarget(DirectX::XMFLOAT2 size, DirectX::XMFLOAT4 clearColor = { 0.0f, 0.0f, 0.0f, 1.0f });
+		RenderTarget(DirectX::XMINT2 size, DirectX::XMFLOAT4 clearColor = { 0.0f, 0.0f, 0.0f, 1.0f });
 		~RenderTarget();
 
 		void setClearColor(DirectX::XMFLOAT4 clearColor) { m_ClearColor = clearColor; };
 
-		void resize(DirectX::XMFLOAT2 size);
+		void resize(DirectX::XMINT2 size);
 
-		DirectX::XMFLOAT2 getSize() { return m_Size; };
+		DirectX::XMINT2 getSize() { return m_Size; };
 		DirectX::XMFLOAT4 getClearColor() { return m_ClearColor; };
 
 		ID3D12Resource* getRenderTarget() { return m_RenderTarget.Get(); };
@@ -26,7 +26,7 @@ namespace Graphics {
 	private:
 		void createRenderTarget(DirectX::XMFLOAT4 clearColor);
 
-		DirectX::XMFLOAT2 m_Size;
+		DirectX::XMINT2 m_Size;
 		DirectX::XMFLOAT4 m_ClearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 

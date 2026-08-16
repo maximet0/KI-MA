@@ -46,7 +46,20 @@ namespace Game {
 		bool m_DrawMode = false;
 		GameObject m_DrawObject;
 
+		DirectX::XMFLOAT2 m_CameraPosition = { 0, 0 };
+		float m_CameraZoom = 1.0f;
+
+		bool m_CameraFollowPlayer = true;
+
+
+		DirectX::XMFLOAT2 m_MousePos = { 0, 0 };
+		DirectX::XMFLOAT2 m_LastMousePos = { 0, 0 };
+		DirectX::XMFLOAT2 m_MouseDelta = { 0, 0 };
+
+		DirectX::XMINT2 m_MouseWheelDelta = { 0, 0 };
+
 		constexpr static float m_Gravity = 9.81f * 64;
+		friend class GameTriggers;
 	};
 
 }

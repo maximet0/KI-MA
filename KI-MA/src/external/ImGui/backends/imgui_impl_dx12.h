@@ -6,6 +6,7 @@
 //  [X] Renderer: Large meshes support (64k+ vertices) even with 16-bit indices (ImGuiBackendFlags_RendererHasVtxOffset).
 //  [X] Renderer: Texture updates support for dynamic font atlas (ImGuiBackendFlags_RendererHasTextures).
 //  [X] Renderer: Expose selected render state for draw callbacks to use. Access in '(ImGui_ImplXXXX_RenderState*)GetPlatformIO().Renderer_RenderState'.
+//  [X] Renderer: Multi-viewport support (multiple windows). Enable with 'io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable'.
 
 // The aim of imgui_impl_dx12.h/.cpp is to be usable in your engine without any modification.
 // IF YOU FEEL YOU NEED TO MAKE ANY CHANGE TO THIS CODE, please share them and your feedback at https://github.com/ocornut/imgui/
@@ -45,8 +46,8 @@ struct ImGui_ImplDX12_InitInfo
     // Allocating SRV descriptors for textures is up to the application, so we provide callbacks.
     // (current version of the backend will only allocate one descriptor, from 1.92 the backend will need to allocate more)
     ID3D12DescriptorHeap*       SrvDescriptorHeap;
-	std::function<void(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE*, D3D12_GPU_DESCRIPTOR_HANDLE*)> SrvDescriptorAllocFn;
-	std::function<void(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE)> SrvDescriptorFreeFn;
+    std::function<void(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE*, D3D12_GPU_DESCRIPTOR_HANDLE*)> SrvDescriptorAllocFn;
+    std::function<void(ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE)> SrvDescriptorFreeFn;
 #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
     D3D12_CPU_DESCRIPTOR_HANDLE LegacySingleSrvCpuDescriptor; // To facilitate transition from single descriptor to allocator callback, you may use those.
     D3D12_GPU_DESCRIPTOR_HANDLE LegacySingleSrvGpuDescriptor;

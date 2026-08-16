@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -114,6 +114,7 @@
     <ClCompile Include="src\Game\GameInstance.cpp" />
     <ClCompile Include="src\Game\GameLevel.cpp" />
     <ClCompile Include="src\Game\GamePhysics.cpp" />
+    <ClCompile Include="src\Game\GameTriggers.cpp" />
     <ClCompile Include="src\Graphics\GraphicsContext.cpp" />
     <ClCompile Include="src\Core\Window.cpp" />
     <ClCompile Include="src\Graphics\GraphicsPipeline.cpp" />
@@ -138,10 +139,12 @@
     <ClInclude Include="src\Events\EventSystem.h" />
     <ClInclude Include="src\Core\Logger.h" />
     <ClInclude Include="src\external\stb_image.h" />
+    <ClInclude Include="src\Game\GameEditor.h" />
     <ClInclude Include="src\Game\GameInstance.h" />
     <ClInclude Include="src\Game\GameLevel.h" />
     <ClInclude Include="src\Game\GameObject.h" />
     <ClInclude Include="src\Game\GamePhysics.h" />
+    <ClInclude Include="src\Game\GameTriggers.h" />
     <ClInclude Include="src\Graphics\GraphicsContext.h" />
     <ClInclude Include="src\Core\Window.h" />
     <ClInclude Include="src\Graphics\GraphicsPipeline.h" />
@@ -158,6 +161,7 @@
     <ClInclude Include="src\external\ImGui\imstb_truetype.h" />
     <ClInclude Include="src\external\ImGui\misc\cpp\imgui_stdlib.h" />
     <ClInclude Include="src\external\ImGui\misc\single_file\imgui_single_file.h" />
+    <ClInclude Include="src\Graphics\TextureManager.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\Shaders\LinePixelShader.hlsl">

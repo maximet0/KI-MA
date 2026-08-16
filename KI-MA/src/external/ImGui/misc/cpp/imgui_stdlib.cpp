@@ -21,7 +21,7 @@
 
 #include "external/ImGui/imgui.h"
 #ifndef IMGUI_DISABLE
-#include "imgui_stdlib.h"
+#include "external/ImGui/misc/cpp/imgui_stdlib.h"
 
 // Clang warnings with -Weverything
 #if defined(__clang__)

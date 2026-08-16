@@ -43,7 +43,7 @@ namespace Graphics {
 		void beginFrame();
 		void endFrame();
 
-		void beginRenderTarget(RenderTarget* renderTarget);
+		void beginRenderTarget(RenderTarget* renderTarget, DirectX::XMFLOAT2 cameraPosition, float cameraZoom);
 		void endRenderTarget(RenderTarget* renderTarget);
 
 		uint32_t createTexture(const char* texturePath);
@@ -96,6 +96,8 @@ namespace Graphics {
 		uint32_t m_CurrentLineOffset = 0;
 		uint32_t m_CurrentLineCount = 0;
 
+
+
 		RenderTarget* m_CurrentRenderTarget = nullptr;
 
 		uint32_t m_RectCount = 0;
@@ -105,6 +107,8 @@ namespace Graphics {
 		uint32_t m_LineCount = 0;
 		Microsoft::WRL::ComPtr<ID3D12Resource> m_LineDataBuf = nullptr;
 		LineData* m_LineDataPtr = nullptr;
+
+		Microsoft::WRL::ComPtr<ID3D12Resource> m_CurrentVPBuf = nullptr;
 
 	};
 

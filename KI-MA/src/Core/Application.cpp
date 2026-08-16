@@ -37,7 +37,6 @@ namespace Core {
 
 	double g_Accumulator = 0.0;
 	double g_RenderAccumulator = 0.0;
-	double g_LastTime = 0.0;
 
 	void Application::onStart() {
 		//Erstellt das Fenster, den Grafik-Kontext, die Swapchain und den Renderer.
@@ -56,8 +55,6 @@ namespace Core {
 		settings.levelPath = "testLevel.lvl";
 
 		m_GameInstance = new Game::GameInstance(settings);
-
-		g_LastTime = std::chrono::high_resolution_clock::now().time_since_epoch().count() / 1000000000.0;
 	}
 
 	void Application::onUpdate() {
@@ -67,24 +64,21 @@ namespace Core {
 			m_Swapchain->resize(m_Window->getSize());
 		}
 
+		static auto lastTime = std::chrono::steady_clock::now();
+		auto currentTime = std::chrono::steady_clock::now().time_since_epoch().count() / 1000000000.0;
 
-		double currentTime = std::chrono::high_resolution_clock::now().time_since_epoch().count() / 1000000000.0;
-		double deltaTime = currentTime - g_LastTime;
-		g_LastTime = currentTime;
+
+		double deltaTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - lastTime).count();
+		lastTime = std::chrono::steady_clock::now();
+
+		deltaTime = (std::min)(deltaTime, 0.25);
 
 		g_Accumulator += deltaTime;
 		g_RenderAccumulator += deltaTime;
 
-		bool tick = false;
-
 		while (g_Accumulator >= TS) {
 			g_Accumulator -= TS;
-			tick = true;
-
-
 			m_GameInstance->update(TS);
-
-
 		}
 
 		while (g_RenderAccumulator >= FS) {
@@ -97,6 +91,8 @@ namespace Core {
 			m_Renderer->beginFrame();
 			m_GameInstance->render();
 
+			//ImGui::ShowDemoWindow();
+
 			m_GameInstance->drawGUI();
 			m_Renderer->endFrame();
 		}
@@ -106,7 +102,7 @@ namespace Core {
 		m_Window->pollEvents();
 		m_EventSystem->pollEvents();
 
-		double sleepTime = TS - g_RenderAccumulator;
+		double sleepTime = (std::min)(TS - g_Accumulator, FS - g_RenderAccumulator);
 		if (sleepTime > 0.0) {
 			std::this_thread::sleep_for(std::chrono::duration<double>(sleepTime));
 		}

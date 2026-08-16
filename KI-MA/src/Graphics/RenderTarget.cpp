@@ -3,7 +3,7 @@
 #include "Core/Application.h"
 
 namespace Graphics {
-	Graphics::RenderTarget::RenderTarget(DirectX::XMFLOAT2 size, DirectX::XMFLOAT4 clearColor)
+	Graphics::RenderTarget::RenderTarget(DirectX::XMINT2 size, DirectX::XMFLOAT4 clearColor)
 		: m_ClearColor(clearColor)
 	{
 		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
@@ -32,7 +32,7 @@ namespace Graphics {
 	
 	}
 
-	void Graphics::RenderTarget::resize(DirectX::XMFLOAT2 size)
+	void Graphics::RenderTarget::resize(DirectX::XMINT2 size)
 	{
 		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
 		auto renderer = Core::Application::getApplication()->getRenderer();

@@ -6,8 +6,10 @@
 #include "Core/Logger.h"
 #include "Events/Callbacks.h"
 #include "GamePhysics.h"
+#include "GameTriggers.h"
 
 #include <cmath>
+
 
 
 namespace Game {
@@ -26,16 +28,25 @@ namespace Game {
 
 		Core::Application::getApplication()->getEventSystem()->registerCallback<Events::KeyboardKeyCallback>(Events::EventType::KEYBOARD_KEY, [this](Core::Window* window, Events::KeyState c, Events::KeyboardKey key, int scancode) {
 			if(c == Events::KeyState::Down) {
-				keyDown[(int)key] = true;
-				//Core::Logger::Debug("Key Pressed: {}", (int)key);
+				keyDown[(uint8_t)key] = true;
 			}
 			else if(c == Events::KeyState::Up) {
-				keyDown[(int)key] = false;
-				//Core::Logger::Debug("Key Released: {}", (int)key);
+				keyDown[(uint8_t)key] = false;
 			}
 		});
 
-		m_DrawObject.type = GameObjectType::Background;
+		Core::Application::getApplication()->getEventSystem()->registerCallback<Events::MousePosCallback>(Events::EventType::MOUSE_POS, [this](Core::Window* window, DirectX::XMINT2 mousePos, DirectX::XMINT2 aMousePos) {
+			m_MousePos.x = mousePos.x;
+			m_MousePos.y = mousePos.y;
+
+			});
+
+		Core::Application::getApplication()->getEventSystem()->registerCallback<Events::MouseWheelCallback>(Events::EventType::MOUSE_WHEEL, [this](Core::Window* window, DirectX::XMINT2 wheelDelta) {
+			m_MouseWheelDelta.x += wheelDelta.x;
+			m_MouseWheelDelta.y += wheelDelta.y;
+			});
+
+		m_DrawObject.flags = (GameObjectFlags)(GameObjectFlags::Valid | GameObjectFlags::Static);
 		m_DrawObject.position = { 0, 0 };
 		m_DrawObject.size = { 32, 32 };
 		m_DrawObject.textureHandle = 1;
@@ -136,7 +147,7 @@ namespace Game {
 			static int32_t playerID = -1;
 			if (playerID == -1) {
 				for (uint16_t i = 0; i < m_GameLevel.getGameObjectCount(); i++) {
-					if (m_GameLevel.getGameObjects()[i].type == GameObjectType::Player) {
+					if (m_GameLevel.getGameObjects()[i].flags & GameObjectFlags::Player) {
 						playerID = i;
 						break;
 					}
@@ -150,13 +161,13 @@ namespace Game {
 				player.physics.acceleration.x = 0.0f;
 
 
-				if (keyDown[(int)Events::KeyboardKey::Key_W] && (grounded || gracePeriod > 0.0f)) {
+				if (keyDown[Events::KeyboardKey::Key_W] && (grounded || gracePeriod > 0.0f)) {
 					player.physics.velocity.y = -jumpForce;
 				}
-				if (keyDown[(int)Events::KeyboardKey::Key_A]) {
+				if (keyDown[Events::KeyboardKey::Key_A]) {
 					player.physics.acceleration.x = -acceleration;
 				}
-				else if (keyDown[(int)Events::KeyboardKey::Key_D]) {
+				else if (keyDown[Events::KeyboardKey::Key_D]) {
 					player.physics.acceleration.x = acceleration;
 				}
 				else {
@@ -169,7 +180,7 @@ namespace Game {
 				}
 
 
-				if (!keyDown[(int)Events::KeyboardKey::Key_A] && !keyDown[(int)Events::KeyboardKey::Key_D])
+				if (!keyDown[Events::KeyboardKey::Key_A] && !keyDown[Events::KeyboardKey::Key_D])
 				{
 					if (std::abs(player.physics.velocity.x) < deceleration * deltaTime)
 						player.physics.velocity.x = 0;
@@ -178,27 +189,31 @@ namespace Game {
 				player.physics.velocity.x = std::clamp(player.physics.velocity.x, -maxSpeed, maxSpeed);
 
 
+				if (m_CameraFollowPlayer) {
+					m_CameraPosition.x = player.position.x + player.size.x / 2;
+					m_CameraPosition.y = player.position.y + player.size.y / 2;
+				}
+
 			}
 
 			GamePhysics::updatePhysics(m_GameLevel, deltaTime, m_Gravity);
 
+
 			if (playerID != -1) {
 				//Ground Check
 				GameObject& player = m_GameLevel.getGameObjects()[playerID];
-				for (uint16_t i = 0; i < 16; i++) {
-					float xPos = player.position.x + (player.size.x / 16) * i;
-					RaycastHit hit = GamePhysics::raycast(m_GameLevel, { xPos, player.position.y + player.size.y + 0.02f }, { 0, 1 }, 5.0f);
-					grounded = hit.hit;
-					if (grounded) {
-						gracePeriod = 0.1f;
-						break;
-					}
+
+				RaycastHit hit = GamePhysics::boxcast(m_GameLevel, { player.position.x, player.position.y + player.size.y + 0.02f }, { player.size.x * 0.9f, 0.02f }, { 0, 1 }, 5.0f);
+				grounded = hit.hit;
+				if (grounded) {
+					gracePeriod = 0.1f;
 				}
 				
 				if(!grounded) gracePeriod -= deltaTime;
 				
 			}
 			
+			GameTriggers::updateTriggers(*this, deltaTime);
 
 			/*grounded = false;
 			uint16_t validIndex = 0;
@@ -263,13 +278,14 @@ namespace Game {
 			}
 		}
 	
-		if (ImGui::Combo("Type", (int*)&obj.type, "Invalid\0Background\0Terrain\0Player\0")) {
-			modified += 1;
-		}
+		if (ImGui::CheckboxFlags("Background", (unsigned int*)&obj.flags, GameObjectFlags::Background)) modified += 1;
+		ImGui::SameLine();
+		if (ImGui::CheckboxFlags("Player", (unsigned int*)&obj.flags, GameObjectFlags::Player)) modified += 1;
+		ImGui::SameLine();
+		if (ImGui::CheckboxFlags("Trigger", (unsigned int*)&obj.flags, GameObjectFlags::Trigger)) modified += 1;
+		ImGui::SameLine();
+		if (ImGui::CheckboxFlags("Static", (unsigned int*)&obj.flags, GameObjectFlags::Static)) modified += 1;
 
-		if (ImGui::Checkbox("Static", &obj.isStatic)) {
-			modified += 1;
-		}
 
 		modified += ImGui::InputInt("Texture Handle", (int*)&obj.textureHandle);
 
@@ -278,6 +294,104 @@ namespace Game {
 		modified += ImGui::DragFloat2("Position", &obj.collider.position.x, 0.5f);
 		modified += ImGui::DragFloat2("Size", &obj.collider.size.x, 0.5f);
 		ImGui::PopID();
+
+		if (obj.flags & GameObjectFlags::Trigger) {
+			ImGui::Text("Triggers");
+			ImGui::PushID("Triggers");
+			for (uint32_t i = 0; i < obj.triggers.size(); i++) {
+				ImGui::PushID(i);
+				if (obj.triggers[i].type == TriggerType::None) {
+					if (ImGui::Button("Add Trigger")) {
+						obj.triggers[i].type = TriggerType::CameraTrigger;
+						modified += 1;
+					}
+					ImGui::PopID();
+					break;
+				}
+
+				ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_FramePadding;
+				float contentRegionAvailX = ImGui::GetContentRegionAvail().x;
+				bool open = ImGui::TreeNodeEx("Trigger", flags);
+
+				ImGui::SameLine(contentRegionAvailX - ImGui::CalcTextSize("X").x);
+
+				if (ImGui::Button("X")){
+					obj.triggers[i].type = TriggerType::None;
+					modified += 1;
+				};
+				if (open) {
+					if (ImGui::Combo("Trigger Type", (int*)&obj.triggers[i].type, "None\0Camera Trigger\0Object Move Trigger\0Score Trigger\0Finish Trigger\0Damage Trigger\0")) {
+						modified += 1;
+					}
+
+					if(ImGui::Combo("Trigger Condition", (int*)&obj.triggers[i].condition, "None\0On Enter\0On Exit\0On Stay\0")) {
+						modified += 1;
+					}
+
+					modified += ImGui::Checkbox("Single Use", &obj.triggers[i].singleUse);
+
+					switch (obj.triggers[i].type) {
+					case TriggerType::CameraTrigger:
+						modified += ImGui::Checkbox("Follow Player", &obj.triggers[i].cameraTrigger.followPlayer);
+						modified += ImGui::DragFloat2("Camera Position", &obj.triggers[i].cameraTrigger.targetPosition.x, 1.0f);
+						modified += ImGui::DragFloat("Transition Time (s)", &obj.triggers[i].cameraTrigger.transitionTime, 0.1f);
+						modified += ImGui::DragFloat("Target Zoom", &obj.triggers[i].cameraTrigger.targetZoom, 0.1f);
+						break;
+					case TriggerType::ObjectMoveTrigger: {
+
+						modified += ImGui::Checkbox("Loop", &obj.triggers[i].objectMoveTrigger.loop);
+
+						for (uint32_t j = 0; j < obj.triggers[i].objectMoveTrigger.targetCount; j++) {
+							ImGui::PushID(j);
+							modified += ImGui::InputInt("Target Object ID", (int*)&obj.triggers[i].objectMoveTrigger.targetObjectIDs[j]);
+							ImGui::PopID();
+						}
+						if (obj.triggers[i].objectMoveTrigger.targetCount < 32) {
+							if (ImGui::Button("Add Target Object ID")) {
+								obj.triggers[i].objectMoveTrigger.targetCount++;
+								modified += 1;
+							}
+						}	
+
+						for (uint32_t j = 0; j < obj.triggers[i].objectMoveTrigger.targetCount; j++) {
+							ImGui::PushID(j);
+							modified += ImGui::DragFloat2("Target Position", &obj.triggers[i].objectMoveTrigger.pathPoints[j].position.x, 1.0f);
+							modified += ImGui::DragFloat("Move Time (s)", &obj.triggers[i].objectMoveTrigger.pathPoints[j].moveTime, 0.1f);
+							ImGui::PopID();
+						}
+						
+						if (obj.triggers[i].objectMoveTrigger.targetCount < 16) {
+							if (ImGui::Button("Add Path Point")) {
+								obj.triggers[i].objectMoveTrigger.targetCount++;
+								modified += 1;
+							}
+						}	
+
+						break;
+					}
+					case TriggerType::DamageTrigger:
+						ImGui::InputInt("Change Amount", (int*)&obj.triggers[i].damageTrigger.damageAmount);
+						break;
+					case TriggerType::ScoreTrigger:
+						ImGui::InputInt("Score Change Amount", (int*)&obj.triggers[i].scoreTrigger.scoreAmount);
+						break;
+					case TriggerType::FinishTrigger:
+						ImGui::InputInt("Minimum Score", (int*)&obj.triggers[i].finishTrigger.minimumScore);
+						ImGui::InputText("Next Level Path", (char*)obj.triggers[i].finishTrigger.nextLevelPath, 256);
+						break;
+					}
+
+					ImGui::Separator();
+					ImGui::TreePop();
+				}
+
+				ImGui::PopID();
+			}
+			ImGui::PopID();
+		}
+
+		
+
 
 		return modified > 0;
 	}
@@ -295,43 +409,8 @@ namespace Game {
 			static GameSettings currentSettings = m_GameSettings;
 
 			std::string levelPathStr = currentSettings.levelPath.string();
-			ImGui::Text("Level Editor");
 
-			if (m_SimulationMode) {
-				if (ImGui::Button(m_Paused ? "Resume Simulation" : "Pause Simulation")) {
-					m_Paused = !m_Paused;
-				}
 
-				ImGui::SameLine();
-
-				if (ImGui::Button("Reset Simulation")) {
-					m_GameLevel = m_SavedLevel;
-				}
-
-				ImGui::SameLine();
-
-				if(ImGui::Button("Stop Simulation")) {
-					m_GameLevel = m_SavedLevel;
-					m_SimulationMode = false;
-					
-				}
-			}
-			else {
-				if (ImGui::Button("Start Simulation")) {
-					m_GameLevel.optimizeLevel();
-					m_SavedLevel = m_GameLevel;
-					m_SimulationMode = true;
-				}
-			}
-
-			ImGui::Checkbox("Grid Lock", &m_GridLock);
-			ImGui::Checkbox("Draw Mode", &m_DrawMode);
-			if (m_DrawMode) {
-				ImGui::Text("Draw Object Properties");
-				drawObjectProperties(m_DrawObject, false);
-
-			}
-			ImGui::Separator();
 			ImGui::Text("Game Settings");
 			ImGui::InputText("Level Path", (char*)levelPathStr.c_str(), 256);
 			currentSettings.levelPath = levelPathStr;
@@ -349,6 +428,50 @@ namespace Game {
 				m_LevelSaved = true;
 			}
 
+			ImGui::Separator();
+
+			ImGui::Text("Level Editor");
+
+			if (m_SimulationMode) {
+				if (ImGui::Button(m_Paused ? "Resume Simulation" : "Pause Simulation")) {
+					m_Paused = !m_Paused;
+				}
+
+				ImGui::SameLine();
+
+				if (ImGui::Button("Reset Simulation")) {
+					m_GameLevel = m_SavedLevel;
+					m_CameraPosition = { 0, 0 };
+					m_CameraFollowPlayer = true;
+				}
+
+				ImGui::SameLine();
+
+				if(ImGui::Button("Stop Simulation")) {
+					m_GameLevel = m_SavedLevel;
+					m_SimulationMode = false;
+					m_CameraPosition = { 0, 0 };
+					m_CameraFollowPlayer = false;
+				}
+			}
+			else {
+				if (ImGui::Button("Start Simulation")) {
+					m_GameLevel.optimizeLevel();
+					m_SavedLevel = m_GameLevel;
+					m_SimulationMode = true;
+					m_CameraFollowPlayer = true;
+				}
+			}
+
+			ImGui::Checkbox("Grid Lock", &m_GridLock);
+			ImGui::Checkbox("Draw Mode", &m_DrawMode);
+			if (m_DrawMode) {
+				ImGui::Text("Draw Object Properties");
+				drawObjectProperties(m_DrawObject, false);
+
+			}
+
+
 			ImGui::End();
 
 			if (saveSettings) {
@@ -356,8 +479,6 @@ namespace Game {
 				currentSettings = m_GameSettings;
 			}
 
-			ImVec2 mousePos;
-			
 			auto& gameObjects = m_GameLevel.getGameObjects();
 			uint16_t objectCount = m_GameLevel.getGameObjectCount();
 
@@ -366,13 +487,24 @@ namespace Game {
 			ImGui::Begin("Game");
 			auto textureHandle = renderer->getSRVGPUDescriptorHandle(m_Target->getSRVDescriptorIndex());
 			ImGui::Image((ImTextureID)(uintptr_t)textureHandle.ptr, ImVec2(m_Target->getSize().x, m_Target->getSize().y));
-			ImVec2 offset = ImGui::GetItemRectMin();
+			DirectX::XMFLOAT2 offset = { ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y };
 			bool gameViewLeftMouseDown = ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left);
 			bool gameViewRightMouseDown = ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Right);
-			mousePos = ImGui::GetMousePos();
 
 			//Berechne die Position der Maus relativ zum RenderTarget
-			ImVec2 relMousePos = { mousePos.x - offset.x, mousePos.y - offset.y };
+			DirectX::XMFLOAT2 relMousePos = { m_MousePos.x - offset.x, m_MousePos.y - offset.y };
+
+			//Berechne die Position in der Welt
+			DirectX::XMVECTOR worldPosVec = DirectX::XMLoadFloat2(&m_MousePos);
+			
+			worldPosVec = DirectX::XMVectorSubtract(worldPosVec, DirectX::XMLoadFloat2(&offset));
+			worldPosVec = DirectX::XMVectorSubtract(worldPosVec, DirectX::XMVectorSet(m_Target->getSize().x * 0.5f, m_Target->getSize().y * 0.5f, 0.0f, 0.0f));
+			worldPosVec = DirectX::XMVectorScale(worldPosVec, m_CameraZoom);
+			worldPosVec = DirectX::XMVectorAdd(worldPosVec, DirectX::XMLoadFloat2(&m_CameraPosition));
+
+			DirectX::XMFLOAT2 worldPos;
+			DirectX::XMStoreFloat2(&worldPos, worldPosVec);
+
 
 			static int32_t selectedIndex = -1;
 			int32_t clickedIndex = -1;
@@ -380,11 +512,11 @@ namespace Game {
 				//Core::Logger::Debug("{} {}", relMousePos.x, relMousePos.y);
 				validIndex = objectCount;
 				for (int32_t i = maxGameObjects - 1; i >= 0 && validIndex >= 0; i--) {
-					if (gameObjects[i].type != GameObjectType::Invalid) validIndex--;
+					if (gameObjects[i].flags & GameObjectFlags::Valid) validIndex--;
 					else continue;
 
-					if (relMousePos.x >= gameObjects[i].position.x && relMousePos.x <= gameObjects[i].position.x + gameObjects[i].size.x &&
-						relMousePos.y >= gameObjects[i].position.y && relMousePos.y <= gameObjects[i].position.y + gameObjects[i].size.y) {
+					if (worldPos.x >= gameObjects[i].position.x && worldPos.x <= gameObjects[i].position.x + gameObjects[i].size.x &&
+						worldPos.y >= gameObjects[i].position.y && worldPos.y <= gameObjects[i].position.y + gameObjects[i].size.y) {
 						if(gameViewLeftMouseDown) selectedIndex = i;
 						clickedIndex = i;
 						break;
@@ -392,12 +524,30 @@ namespace Game {
 				}
 			}
 
+
+			static bool cameraDrag = false;
+
+			if (keyDown[Events::KeyboardKey::Key_LSHIFT] && gameViewRightMouseDown) cameraDrag = true;
+			if (!ImGui::IsMouseDown(ImGuiMouseButton_Right)) cameraDrag = false;
+
+			if (cameraDrag) {
+				m_CameraPosition.x -= m_MouseDelta.x * m_CameraZoom;
+				m_CameraPosition.y -= m_MouseDelta.y * m_CameraZoom;
+			}
+
+			if (keyDown[Events::KeyboardKey::Key_LSHIFT] && ImGui::IsItemHovered() && m_MouseWheelDelta.y != 0.0f) {
+				m_CameraZoom -= m_MouseWheelDelta.y * 0.1f;
+				if (m_CameraZoom < 0.1f) m_CameraZoom = 0.1f;
+				if (m_CameraZoom > 10.0f) m_CameraZoom = 10.0f;
+			}
+
+
 			if (m_DrawMode) {
 				//ImGui::
 				if (gameViewLeftMouseDown && clickedIndex == -1) {
 					
-					m_DrawObject.position.x = mousePos.x - offset.x;
-					m_DrawObject.position.y = mousePos.y - offset.y;
+					m_DrawObject.position.x = worldPos.x;
+					m_DrawObject.position.y = worldPos.y;
 
 					if (m_GridLock) {
 						m_DrawObject.position.x = std::floor(m_DrawObject.position.x / 32.0f) * 32.0f;
@@ -421,7 +571,7 @@ namespace Game {
 
 			if (ImGui::Button("Add Object")) {
 				GameObject defaultObj;
-				defaultObj.type = GameObjectType::Background;
+				defaultObj.flags = (GameObjectFlags)(GameObjectFlags::Valid | GameObjectFlags::Static);
 				defaultObj.position = { 0, 0 };
 				defaultObj.size = { 32, 32 };
 				defaultObj.textureHandle = 1;
@@ -439,7 +589,7 @@ namespace Game {
 			if (ImGui::TreeNodeEx("GameObjects", ImGuiTreeNodeFlags_DefaultOpen, "GameObjects (%d)", objectCount)) {
 
 				for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-					if (gameObjects[i].type == GameObjectType::Invalid) continue;
+					if ((gameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
 					validIndex++;
 
 					ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
@@ -515,6 +665,13 @@ namespace Game {
 				app->exit();
 			}
 		}
+
+		m_MouseDelta.x = m_MousePos.x - m_LastMousePos.x;
+		m_MouseDelta.y = m_MousePos.y - m_LastMousePos.y;
+		m_LastMousePos = m_MousePos;
+
+		m_MouseWheelDelta.x = 0;
+		m_MouseWheelDelta.y = 0;
 	}
 
 	void GameInstance::render()
@@ -523,7 +680,7 @@ namespace Game {
 		Graphics::Renderer* renderer = application->getRenderer();
 
 
-		renderer->beginRenderTarget(m_Target);
+		renderer->beginRenderTarget(m_Target, m_CameraPosition, 1.0f / m_CameraZoom);
 
 		auto& gameObjects = m_GameLevel.getGameObjects();
 		uint16_t objectCount = m_GameLevel.getGameObjectCount();
@@ -531,52 +688,74 @@ namespace Game {
 		uint16_t validIndex = 0;
 		//Hintergrund -> Terrain -> Spieler //TODO: Z-Layer im Renderer
 		for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-			if (gameObjects[i].type == GameObjectType::Invalid) continue;
+			if ((gameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
 			validIndex++;
 
-			if (gameObjects[i].type == GameObjectType::Background) {
+			if (gameObjects[i].flags & GameObjectFlags::Background) {
 				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, gameObjects[i].textureHandle);
 			}
 		}
 
 		validIndex = 0;
 		for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-			if (gameObjects[i].type == GameObjectType::Invalid) continue;
+			if ((gameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
 			validIndex++;
 
-			if (gameObjects[i].type == GameObjectType::Terrain) {
+			if ((gameObjects[i].flags & GameObjectFlags::Background) == 0) {
 				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, gameObjects[i].textureHandle);
 			}
 		}
 
 		validIndex = 0;
 		for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-			if (gameObjects[i].type == GameObjectType::Invalid) continue;
+			if ((gameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
 			validIndex++;
 
-			if (gameObjects[i].type == GameObjectType::Player) {
+			if (gameObjects[i].flags & GameObjectFlags::Player) {
 				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, gameObjects[i].textureHandle);
 			}
 		}
 
 		if (m_GameSettings.levelEditorMode) {
-			for (int x = 0; x < 1280; x += 32) {
-				renderer->submitLine({ (float)x, 0 }, { (float)x, 720 }, 0x6F829440);
+			//Ein Raster basierend auf der Kameraposition und dem Zoomlevel zeichnen;
+			
+			constexpr float gridSize = 32.0f;
+			constexpr float invGridSize = 1.0f / gridSize;
+			constexpr float gridSize2x = gridSize * 2;
+
+			float halfWidth = m_Target->getSize().x * 0.5f * m_CameraZoom;
+			float halfHeight = m_Target->getSize().y * 0.5f * m_CameraZoom;
+
+			float left = m_CameraPosition.x - halfWidth;
+			float right = m_CameraPosition.x + halfWidth;
+			float top = m_CameraPosition.y - halfHeight;
+			float bottom = m_CameraPosition.y + halfHeight;
+
+			float startX = std::floor(left / gridSize) * gridSize;
+			float startY = std::floor(top / gridSize) * gridSize;
+
+			for (int32_t x = startX; x <= right; x += gridSize) {
+				renderer->submitLine({ (float)x, (float)top }, { (float)x, (float)bottom }, 0x6F829440);
 			}
-			for (int y = 0; y < 720; y += 32) {
-				renderer->submitLine({ 0, (float)y }, { 1280, (float)y }, 0x6F829440);
+
+			for (int32_t y = startY; y <= bottom; y += gridSize) {
+				renderer->submitLine({ (float)right, (float)y }, { (float)left, (float)y }, 0x6F829440);
 			}
+
 		}
 
 		validIndex = 0;
 		if (m_GameSettings.showColliders) {
 			for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-				if (gameObjects[i].type == GameObjectType::Invalid) continue;
+				uint32_t color = 0x00FF00FF;
+				if ((gameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
+				if ((gameObjects[i].flags & GameObjectFlags::Trigger) != 0) color = 0xFF0000FF;
+				if ((gameObjects[i].flags & GameObjectFlags::Static) == 0) color = 0x0000FFFF;
 				validIndex++;
-				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, 0x00FF00FF);
-				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, 0x00FF00FF);
-				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, 0x00FF00FF);
-				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, 0x00FF00FF);
+				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, color);
+				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, color);
+				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, color);
+				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, color);
 			}
 		}
 

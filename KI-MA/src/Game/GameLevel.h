@@ -22,11 +22,20 @@ namespace Game {
 
 		void optimizeLevel();
 
+		void setScore(uint32_t score) { m_Score = score; };
+		void setPlayerLives(uint32_t playerLives) { m_PlayerLives = playerLives; };
+
+		uint32_t getScore() { return m_Score; };
+		uint32_t getPlayerLives() { return m_PlayerLives; };
+
 		std::array<GameObject, maxGameObjects>& getGameObjects() { return m_GameObjects; }
 		uint16_t getGameObjectCount() { return m_ObjectCount; };
 	private:
-		// Slot basiert, damit man die GameObjects einfach per Index ansprechen kann.
 
+		uint32_t m_PlayerLives = 3;
+		uint32_t m_Score = 0;
+
+		// Slot basiert, damit man die GameObjects einfach per Index ansprechen kann.
 		std::array<GameObject, maxGameObjects> m_GameObjects;
 
 		std::vector<uint16_t> m_FreeSlots;

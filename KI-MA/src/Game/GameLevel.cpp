@@ -28,7 +28,7 @@ namespace Game {
 	void GameLevel::removeGameObject(uint16_t index)
 	{
 		m_FreeSlots.push_back(index);
-		m_GameObjects[index].type = GameObjectType::Invalid;
+		m_GameObjects[index].flags = GameObjectFlags::Invalid;
 		m_ObjectCount--;
 	}
 
@@ -56,6 +56,7 @@ namespace Game {
 		std::fstream file(levelPath, std::ios::out | std::ios::binary);
 		optimizeLevel();
 
+		// Alles wird gespeichert, somit kann die Datei auch als gespeicherter Spielstand verwendet werden.
 		file.write(reinterpret_cast<char*>(m_GameObjects.data()), m_ObjectCount * sizeof(GameObject));
 	}
 
@@ -64,7 +65,7 @@ namespace Game {
 		GameObject* gameObjects = new GameObject[m_LastFreeIndex];
 		uint16_t validIndex = 0;
 		for (uint16_t i = 0; i < m_LastFreeIndex; i++) {
-			if (m_GameObjects[i].type == GameObjectType::Invalid) continue;
+			if ((m_GameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
 			gameObjects[validIndex] = m_GameObjects[i];
 			validIndex++;
 		}

@@ -18,6 +18,8 @@ namespace Game {
 
 		static void updatePhysics(GameLevel& level, float deltaTime, float gravity);
 	private:
+		static bool checkCollision(const GameCollider& a, const GameObject& aObj, const GameCollider& b, const GameObject& bObj);
+
 		/// <summary>
 		/// Gibt die Überlappung in X-Richtung zurück, wenn eine Kollision vorliegt. Ansonsten 0.
 		/// </summary>

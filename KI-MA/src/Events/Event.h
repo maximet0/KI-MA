@@ -53,7 +53,7 @@ namespace Events {
 		Key_F1, Key_F2, Key_F3, Key_F4, Key_F5, Key_F6, Key_F7, Key_F8, Key_F9, Key_F10, Key_F11, Key_F12,
 		Key_F13, Key_F14, Key_F15, Key_F16, Key_F17, Key_F18, Key_F19, Key_F20, Key_F21, Key_F22, Key_F23, Key_F24,
 		Key_NumLock = 0x90, Key_Scroll, Key_NumEqual,
-		Key_LSHIFT = 0xA0, Key_RSHIFT, Key_LCONTROL, Key_RControl, Key_LALT, Key_RALT,
+		Key_LSHIFT = 0xA0, Key_RSHIFT, Key_LCONTROL, Key_RCONTROL, Key_LALT, Key_RALT,
 		Key_Quote = 0xDE,
 		Key_Equal = 0xBB, Key_Comma, Key_Dash, Key_Period, Key_Slash, Key_Grave,
 		Key_LBracket = 0xDB, Key_BackSlash, Key_RBracket,
