@@ -49,7 +49,7 @@ namespace Game {
 		m_DrawObject.flags = (GameObjectFlags)(GameObjectFlags::Valid | GameObjectFlags::Static);
 		m_DrawObject.position = { 0, 0 };
 		m_DrawObject.size = { 32, 32 };
-		m_DrawObject.textureHandle = 1;
+		strcpy_s(m_DrawObject.textureName, "");
 
 		m_DrawObject.collider.position = { 0, 0 };
 		m_DrawObject.collider.size = { 32, 32 };
@@ -258,8 +258,170 @@ namespace Game {
 		}
 	}
 
+	bool drawTextureEntry(Graphics::TextureSetEntry& tex, char textureName[64], uint32_t setID) {
+		bool modified = false;
+		Core::Application* app = Core::Application::getApplication();
+		Graphics::TextureManager& textureManager = app->getRenderer()->getTextureManager();
+		static char newPath[256] = "";
+
+		ImGui::PushID(tex.textureName.c_str());
+
+		const ImGuiStyle& style = ImGui::GetStyle();
+
+		float width = ImGui::GetContentRegionAvail().x;
+		ImVec2 ItemPos = ImGui::GetCursorScreenPos();
+
+		if (ImGui::InvisibleButton("##InvisibleButton", ImVec2(width, 32 + style.FramePadding.y * 2))) {
+			modified = true;
+		}
+		
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		ImColor col = ImGui::GetColorU32(ImGuiCol_Header);
+		if (ImGui::IsItemHovered()) {
+			col = ImGui::GetColorU32(ImGuiCol_HeaderHovered);
+		}
+		else if (tex.textureName == std::string(textureName)) {
+			col = ImGui::GetColorU32(ImGuiCol_HeaderActive);
+		}
+	
+		drawList->AddRectFilled(ItemPos, ImVec2(ItemPos.x + width, ItemPos.y + 32 + style.FramePadding.y * 2), col);
+
+		ItemPos.x += style.FramePadding.x;
+		ItemPos.y += style.FramePadding.y;
+
+		drawList->AddImage((ImTextureID)textureManager.getSRVGPUDescriptorHandle(tex.textureID).ptr, ItemPos, ImVec2(ItemPos.x + 32, ItemPos.y + 32));
+
+		drawList->AddText(ImVec2(ItemPos.x + 40, ItemPos.y + 8), IM_COL32(255, 255, 255, 255), tex.textureName.c_str());
+
+		bool rename = false;
+		bool pathChange = false;
+
+		if (ImGui::BeginPopupContextItem("##context")) {
+			if (ImGui::MenuItem("Rename"))
+			{
+				rename = true;
+				newPath[0] = '\0';
+			}
+
+			if (ImGui::MenuItem("Change Path"))
+			{
+				pathChange = true;
+				newPath[0] = '\0';
+			}
+
+			if (ImGui::MenuItem("Delete"))
+			{
+				modified = true;
+				textureManager.removeTextureFromSet(setID, tex.textureName);
+			}
+
+			ImGui::EndPopup();
+		}
+
+		if (rename) ImGui::OpenPopup("Rename Texture");
+		else if (pathChange) ImGui::OpenPopup("Replace Texture");
+
+		if (ImGui::BeginPopup("Replace Texture")) {
+			if (newPath[0] == '\0') strcpy_s(newPath, sizeof(newPath), tex.texturePath.string().c_str());
+			ImGui::InputText("New Texture Path", newPath, 256);
+
+			if (ImGui::Button("Replace")) {
+				textureManager.modifyTextureInSet(setID, tex.textureName, tex.textureName, std::filesystem::path(newPath));
+			}
+			ImGui::EndPopup();
+		}
+
+		if (ImGui::BeginPopup("Rename Texture")) {
+			if (newPath[0] == '\0') strcpy_s(newPath, sizeof(newPath), tex.textureName.c_str());
+			ImGui::InputText("New Name", newPath, 256);
+
+			if (ImGui::Button("Rename")) {
+				textureManager.modifyTextureInSet(setID, tex.textureName, std::string(newPath), tex.texturePath);
+			}
+			ImGui::EndPopup();
+		}
+
+		ImGui::PopID();
+		return modified;
+	}
+
+	bool drawTextureSelector(uint32_t& setID, char textureName[64], bool& open) {
+		bool modified = false;
+		Core::Application* app = Core::Application::getApplication();
+		Graphics::TextureManager& textureManager = app->getRenderer()->getTextureManager();
+
+
+		ImGui::Text("Texture %s", textureName);
+		ImGui::SameLine();
+
+		if (ImGui::Button("Select Texture")) {
+			open = true;
+		}
+
+		if (open) {
+
+			ImGui::Begin("Texture Selector", &open);
+
+			if (ImGui::Button("Create New Set")) {
+				setID = textureManager.createTextureSet();
+				textureManager.addTextureToSet(setID, "Texture");
+			}
+			auto& textureSets = textureManager.getTextureSets();
+
+			if (textureSets.size() != 0) {
+				if (ImGui::Button("Add Texture")) {
+					static int counter = 1;
+					std::string newName = std::format("Texture ({})", counter++);
+
+					textureManager.addTextureToSet(setID, newName);
+				}
+			}
+
+
+			ImGui::Separator();
+
+
+			if (textureSets.size() == 0) {
+				ImGui::Text("No texture sets loaded");
+				ImGui::End();
+				return modified;
+			}
+
+			auto& textureSet = textureManager.getTextureSetByID(setID);
+
+			if(textureSet.textures.size() == 0) {
+				ImGui::Text("No textures in set");
+				ImGui::End();
+				return modified;
+			}
+
+
+
+
+			for (auto& texture : textureSet.textures) {
+				if(drawTextureEntry(texture, textureName, setID)) {
+					strcpy_s(textureName, 64, texture.textureName.c_str());
+					modified = true;
+				}
+			}
+
+			
+
+			ImGui::End();
+		}
+
+		return modified;
+
+	}
+
 	bool GameInstance::drawObjectProperties(GameObject& obj, bool pos) {
 		int modified = 0;
+
+		ImGui::PushID(&obj);
+
+		ImGui::InputText("Name", obj.objectName, 64);
+
 		if (pos) {
 			if (ImGui::DragFloat2("Position", &obj.position.x, m_GridLock ? 8.0f : 1.0f) ) {
 				modified += 1;
@@ -286,8 +448,8 @@ namespace Game {
 		ImGui::SameLine();
 		if (ImGui::CheckboxFlags("Static", (unsigned int*)&obj.flags, GameObjectFlags::Static)) modified += 1;
 
-
-		modified += ImGui::InputInt("Texture Handle", (int*)&obj.textureHandle);
+		static bool m_TextureSelectorOpen = false;
+		modified += drawTextureSelector(m_TextureSetID, obj.textureName, m_TextureSelectorOpen);
 
 		ImGui::Text("Collider Properties");
 		ImGui::PushID("Collider");
@@ -391,7 +553,7 @@ namespace Game {
 		}
 
 		
-
+		ImGui::PopID();
 
 		return modified > 0;
 	}
@@ -485,7 +647,7 @@ namespace Game {
 			uint16_t validIndex = 0;
 
 			ImGui::Begin("Game");
-			auto textureHandle = renderer->getSRVGPUDescriptorHandle(m_Target->getSRVDescriptorIndex());
+			auto textureHandle = renderer->getTextureManager().getSRVGPUDescriptorHandle(m_Target->getSRVDescriptorIndex());
 			ImGui::Image((ImTextureID)(uintptr_t)textureHandle.ptr, ImVec2(m_Target->getSize().x, m_Target->getSize().y));
 			DirectX::XMFLOAT2 offset = { ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y };
 			bool gameViewLeftMouseDown = ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left);
@@ -574,7 +736,7 @@ namespace Game {
 				defaultObj.flags = (GameObjectFlags)(GameObjectFlags::Valid | GameObjectFlags::Static);
 				defaultObj.position = { 0, 0 };
 				defaultObj.size = { 32, 32 };
-				defaultObj.textureHandle = 1;
+				strcpy_s(defaultObj.textureName, "");
 
 				defaultObj.collider.position = { 0, 0 };
 				defaultObj.collider.size = { 32, 32 };
@@ -657,7 +819,7 @@ namespace Game {
 		}
 		else {
 			ImGui::Begin("Game Instance");
-			auto textureHandle = renderer->getSRVGPUDescriptorHandle(m_Target->getSRVDescriptorIndex());
+			auto textureHandle = renderer->getTextureManager().getSRVGPUDescriptorHandle(m_Target->getSRVDescriptorIndex());
 			ImGui::Image((ImTextureID)(uintptr_t)textureHandle.ptr, ImVec2(m_Target->getSize().x, m_Target->getSize().y));
 			ImGui::End();
 
@@ -692,7 +854,8 @@ namespace Game {
 			validIndex++;
 
 			if (gameObjects[i].flags & GameObjectFlags::Background) {
-				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, gameObjects[i].textureHandle);
+				uint32_t textureHandle = renderer->getTextureManager().getTextureIDFromSet(m_TextureSetID, gameObjects[i].textureName);
+				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, textureHandle);
 			}
 		}
 
@@ -702,7 +865,8 @@ namespace Game {
 			validIndex++;
 
 			if ((gameObjects[i].flags & GameObjectFlags::Background) == 0) {
-				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, gameObjects[i].textureHandle);
+				uint32_t textureHandle = renderer->getTextureManager().getTextureIDFromSet(m_TextureSetID, gameObjects[i].textureName);
+				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, textureHandle);
 			}
 		}
 
@@ -712,7 +876,8 @@ namespace Game {
 			validIndex++;
 
 			if (gameObjects[i].flags & GameObjectFlags::Player) {
-				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, gameObjects[i].textureHandle);
+				uint32_t textureHandle = renderer->getTextureManager().getTextureIDFromSet(m_TextureSetID, gameObjects[i].textureName);
+				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, textureHandle);
 			}
 		}
 

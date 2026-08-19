@@ -59,6 +59,9 @@ namespace Game {
 		DirectX::XMINT2 m_MouseWheelDelta = { 0, 0 };
 
 		constexpr static float m_Gravity = 9.81f * 64;
+
+		uint32_t m_TextureSetID;
+
 		friend class GameTriggers;
 	};
 

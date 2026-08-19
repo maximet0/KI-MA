@@ -24,7 +24,7 @@ namespace Graphics {
 		srvDesc.Texture2D.PlaneSlice = 0;
 		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-		device->CreateShaderResourceView(m_RenderTarget.Get(), &srvDesc, renderer->getNextSRVDescriptorHandle(m_SRVDescriptorIndex));
+		device->CreateShaderResourceView(m_RenderTarget.Get(), &srvDesc, renderer->getTextureManager().getNextSRVDescriptorHandle(m_SRVDescriptorIndex));
 	}
 
 	Graphics::RenderTarget::~RenderTarget()
@@ -49,7 +49,7 @@ namespace Graphics {
 		srvDesc.Texture2D.PlaneSlice = 0;
 		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-		device->CreateShaderResourceView(m_RenderTarget.Get(), &srvDesc, renderer->getSRVDescriptorHandle(m_SRVDescriptorIndex));
+		device->CreateShaderResourceView(m_RenderTarget.Get(), &srvDesc, renderer->getTextureManager().getSRVDescriptorHandle(m_SRVDescriptorIndex));
 	}
 
 	void RenderTarget::createRenderTarget(DirectX::XMFLOAT4 clearColor) {

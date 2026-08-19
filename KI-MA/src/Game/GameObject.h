@@ -115,7 +115,8 @@ namespace Game {
 		GameObjectFlags flags = GameObjectFlags::Invalid;
 		DirectX::XMFLOAT2 position = {0, 0};
 		DirectX::XMFLOAT2 size = {0, 0};
-		uint32_t textureHandle = 0;
+		char objectName[64] = "Unnamed";
+		char textureName[64] = "";
 
 		GameCollider collider;
 

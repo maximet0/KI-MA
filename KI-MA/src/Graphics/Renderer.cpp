@@ -26,16 +26,6 @@ namespace Graphics {
 		device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_Fence));
 		m_FenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
-		// Descriptor Heap für Shader Resource Views erstellen
-		D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
-		srvHeapDesc.NumDescriptors = 1024;
-		srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-		srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-
-		device->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&m_SRVHeap));
-		m_SRVHeapCPUStart = m_SRVHeap->GetCPUDescriptorHandleForHeapStart();
-		m_SRVHeapGPUStart = m_SRVHeap->GetGPUDescriptorHandleForHeapStart();
-		m_SRVDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{};
 		rtvHeapDesc.NumDescriptors = 1024;
@@ -118,13 +108,12 @@ namespace Graphics {
 		init_info.NumFramesInFlight = frameCount;
 		init_info.RTVFormat = Core::Application::getApplication()->getSwapchain()->getCurrentBackBuffer()->GetDesc().Format;
 		init_info.DSVFormat = DXGI_FORMAT_UNKNOWN;
-		init_info.SrvDescriptorHeap = m_SRVHeap;
+		init_info.SrvDescriptorHeap = m_TextureManager.getSRVDescriptorHeap();
 
 		init_info.SrvDescriptorAllocFn = [&](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_desc_handle, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_desc_handle) {
-			out_cpu_desc_handle->ptr = m_SRVHeapCPUStart.ptr + m_SRVHeapCurrentIndex * m_SRVDescriptorSize;
-			out_gpu_desc_handle->ptr = m_SRVHeapGPUStart.ptr + m_SRVHeapCurrentIndex * m_SRVDescriptorSize;
-
-			m_SRVHeapCurrentIndex++;
+			uint32_t index = 0;
+			out_cpu_desc_handle->ptr = m_TextureManager.getNextSRVDescriptorHandle(index).ptr;
+			out_gpu_desc_handle->ptr = m_TextureManager.getSRVGPUDescriptorHandle(index).ptr;
 		};
 
 		init_info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpu_desc_handle, D3D12_GPU_DESCRIPTOR_HANDLE gpu_desc_handle) {
@@ -143,7 +132,7 @@ namespace Graphics {
 		m_CmdList->Reset(m_CmdAllocators[frameIndex], 0);
 
 		// Descriptor Heap setzen
-		m_CmdList->SetDescriptorHeaps(1, &m_SRVHeap);
+		m_CmdList->SetDescriptorHeaps(1, &m_TextureManager.getSRVDescriptorHeap());
 
 		m_RectCount = 0;
 		m_CurrentRectOffset = 0;
@@ -153,84 +142,7 @@ namespace Graphics {
 	}
 
 
-
-	//TODO: move
-#define STB_IMAGE_IMPLEMENTATION
-#include "external/stb_image.h"
-	Microsoft::WRL::ComPtr<ID3D12Resource> uploadBuf;
-	Microsoft::WRL::ComPtr<ID3D12Resource> texture;
-	uint32_t Renderer::createTexture(const char* texturePath) {
-		Core::Application* app = Core::Application::getApplication();
-		int32_t width, height;
-		int32_t channels;
-		char* data = (char*)stbi_load(texturePath, &width, &height, &channels, 4);
-
-		D3D12_HEAP_PROPERTIES heapProperties = {};
-		heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-		D3D12_RESOURCE_DESC resourceDesc = {};
-		resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-		resourceDesc.Width = width;
-		resourceDesc.Height = height;
-		resourceDesc.DepthOrArraySize = 1;
-		resourceDesc.MipLevels = 1;
-		resourceDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		resourceDesc.SampleDesc = { 1, 0 };
-		resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-		resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-		app->getGraphicsContext()->getDevice()->CreateCommittedResource(
-			&heapProperties, D3D12_HEAP_FLAG_NONE,
-			&resourceDesc, D3D12_RESOURCE_STATE_COPY_DEST,
-			nullptr, IID_PPV_ARGS(&texture)
-		);
-	
-
-		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
-		UINT numRows = 0;
-		UINT64 rowSizeBytes = 0;
-		UINT64 uploadSize = 0;
-		app->getGraphicsContext()->getDevice()->GetCopyableFootprints(&resourceDesc, 0, 1, 0, &footprint, &numRows, &rowSizeBytes, &uploadSize);
-		uploadBuf = createBuffer(uploadSize, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
-
-		char* imageData;
-		uploadBuf->Map(0, nullptr, reinterpret_cast<void**>(&imageData));
-
-		for (uint32_t row = 0; row < numRows; row++) {
-			memcpy(imageData + footprint.Offset + row * footprint.Footprint.RowPitch, data + row * width * 4, width * 4);
-		}
-
-		uploadBuf->Unmap(0, nullptr);
-		stbi_image_free(data);
-
-		D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
-		srcLocation.pResource = uploadBuf.Get();
-		srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-		srcLocation.PlacedFootprint = footprint;
-
-		D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
-		dstLocation.pResource = texture.Get();
-		dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-		dstLocation.SubresourceIndex = 0;
-
-		m_CmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);	
-		transition(texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Texture2D.MipLevels = 1;
-		srvDesc.Texture2D.MostDetailedMip = 0;
-		srvDesc.Texture2D.PlaneSlice = 0;
-		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-
-		uint32_t index = 0;
-		app->getGraphicsContext()->getDevice()->CreateShaderResourceView(texture.Get(), &srvDesc, getNextSRVDescriptorHandle(index));
-		return index;
-	}
-
-	Microsoft::WRL::ComPtr<ID3D12Resource> Renderer::createBuffer(size_t size, D3D12_HEAP_TYPE type, D3D12_RESOURCE_STATES initState) {
+	ID3D12Resource* Renderer::createBuffer(size_t size, D3D12_HEAP_TYPE type, D3D12_RESOURCE_STATES initState) {
 		Core::Application* app = Core::Application::getApplication();
 		D3D12_HEAP_PROPERTIES heapProperties = {};
 		heapProperties.Type = type;
@@ -246,7 +158,7 @@ namespace Graphics {
 		resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 		resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-		Microsoft::WRL::ComPtr<ID3D12Resource> buffer = nullptr;
+		ID3D12Resource* buffer = nullptr;
 
 		app->getGraphicsContext()->getDevice()->CreateCommittedResource(
 			&heapProperties, D3D12_HEAP_FLAG_NONE, 
@@ -257,15 +169,12 @@ namespace Graphics {
 		return buffer;
 	}
 
-	int32_t textureIndex = -1;
 
 	void Renderer::submitRect(DirectX::XMFLOAT2 position, DirectX::XMFLOAT2 size, uint32_t textureHandle)
 	{
-		if (textureIndex == -1)
-			textureIndex = createTexture("Textures/brick.png");
 		m_RectDataPtr[m_RectCount].pos = { position.x + size.x / 2, position.y + size.y / 2 };
 		m_RectDataPtr[m_RectCount].size = size;
-		m_RectDataPtr[m_RectCount].textureID = textureIndex;//textureHandle;
+		m_RectDataPtr[m_RectCount].textureID = textureHandle;
 
 		m_RectCount++;
 		m_CurrentRectCount++;
@@ -504,28 +413,6 @@ namespace Graphics {
 		handle.ptr += m_RTVDescriptorSize * m_RTVHeapCurrentIndex;
 		index = m_RTVHeapCurrentIndex;
 		m_RTVHeapCurrentIndex++;
-		return handle;
-	}
-
-	D3D12_CPU_DESCRIPTOR_HANDLE Renderer::getSRVDescriptorHandle(uint32_t index)
-	{
-		D3D12_CPU_DESCRIPTOR_HANDLE handle = m_SRVHeapCPUStart;
-		handle.ptr += m_RTVDescriptorSize * index;
-		return handle;
-	}
-
-	D3D12_CPU_DESCRIPTOR_HANDLE Renderer::getNextSRVDescriptorHandle(uint32_t& index) {
-		D3D12_CPU_DESCRIPTOR_HANDLE handle = m_SRVHeapCPUStart;
-		handle.ptr += m_SRVDescriptorSize * m_SRVHeapCurrentIndex;
-		index = m_SRVHeapCurrentIndex;
-		m_SRVHeapCurrentIndex++;
-		return handle;
-	}
-
-	D3D12_GPU_DESCRIPTOR_HANDLE Renderer::getSRVGPUDescriptorHandle(uint32_t index)
-	{
-		D3D12_GPU_DESCRIPTOR_HANDLE handle = m_SRVHeapGPUStart;
-		handle.ptr += m_SRVDescriptorSize * index;
 		return handle;
 	}
 

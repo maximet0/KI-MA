@@ -129,6 +129,7 @@
     <ClCompile Include="src\external\ImGui\misc\cpp\imgui_stdlib.cpp" />
     <ClCompile Include="src\external\ImGui\misc\fonts\binary_to_compressed_c.cpp" />
     <ClCompile Include="src\Graphics\RenderTarget.cpp" />
+    <ClCompile Include="src\Graphics\TextureManager.cpp" />
     <ClCompile Include="src\KI-MA.cpp" />
     <ClCompile Include="src\Graphics\Swapchain.cpp" />
   </ItemGroup>

@@ -7,6 +7,7 @@
 
 #include "GraphicsPipeline.h"
 #include "RenderTarget.h"
+#include "TextureManager.h"
 
 namespace Graphics {
 
@@ -47,7 +48,7 @@ namespace Graphics {
 		void endRenderTarget(RenderTarget* renderTarget);
 
 		uint32_t createTexture(const char* texturePath);
-		Microsoft::WRL::ComPtr<ID3D12Resource> createBuffer(size_t size, D3D12_HEAP_TYPE type, D3D12_RESOURCE_STATES initState);
+		ID3D12Resource* createBuffer(size_t size, D3D12_HEAP_TYPE type, D3D12_RESOURCE_STATES initState);
 
 		void submitRect(DirectX::XMFLOAT2 position, DirectX::XMFLOAT2 size, uint32_t textureHandle);
 		void submitLine(DirectX::XMFLOAT2 begin, DirectX::XMFLOAT2 end, uint32_t color);
@@ -59,18 +60,18 @@ namespace Graphics {
 		D3D12_CPU_DESCRIPTOR_HANDLE getRTVDescriptorHandle(uint32_t index);
 		D3D12_CPU_DESCRIPTOR_HANDLE getNextRTVDescriptorHandle(uint32_t& index);
 
-		D3D12_CPU_DESCRIPTOR_HANDLE getSRVDescriptorHandle(uint32_t index);
-		D3D12_CPU_DESCRIPTOR_HANDLE getNextSRVDescriptorHandle(uint32_t& index);
+		void transition(ID3D12Resource* res, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
+		ID3D12GraphicsCommandList*& getCmdList() { return m_CmdList; }
 
-		D3D12_GPU_DESCRIPTOR_HANDLE getSRVGPUDescriptorHandle(uint32_t index);
 
+		TextureManager& getTextureManager() { return m_TextureManager; }
 	private:	
 
-		void transition(ID3D12Resource* res, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 
 		GraphicsPipeline m_DefaultPipeline;
 		GraphicsPipeline m_LinePipeline;
 
+		TextureManager m_TextureManager;
 
 		ID3D12GraphicsCommandList* m_CmdList;
 		ID3D12CommandAllocator* m_CmdAllocators[frameCount];
@@ -78,12 +79,6 @@ namespace Graphics {
 		ID3D12Fence* m_Fence = nullptr;
 		uint64_t m_FenceValues[frameCount] = {};
 		HANDLE m_FenceEvent = nullptr;
-
-		ID3D12DescriptorHeap* m_SRVHeap = nullptr;
-		D3D12_CPU_DESCRIPTOR_HANDLE m_SRVHeapCPUStart;
-		D3D12_GPU_DESCRIPTOR_HANDLE m_SRVHeapGPUStart;
-		uint32_t m_SRVDescriptorSize = 0;
-		uint32_t m_SRVHeapCurrentIndex = 0;
 
 		ID3D12DescriptorHeap* m_RTVHeap = nullptr;
 		D3D12_CPU_DESCRIPTOR_HANDLE m_RTVHeapCPUStart;
