@@ -55,6 +55,18 @@ namespace Core {
 		settings.levelPath = "testLevel.lvl";
 
 		m_GameInstance = new Game::GameInstance(settings);
+
+		if (!std::filesystem::exists("TextureSets")) {
+			std::filesystem::create_directory("TextureSets");
+		}
+
+		m_Renderer->getTextureManager().beginTextureLoad();
+		for (std::filesystem::directory_entry entry : std::filesystem::directory_iterator("TextureSets")) {
+			if (entry.is_regular_file() && entry.path().extension() == ".txst") {
+				m_Renderer->getTextureManager().loadTextureSet(entry.path());
+			}
+		}
+		m_Renderer->getTextureManager().endTextureLoad();
 	}
 
 	void Application::onUpdate() {

@@ -346,13 +346,12 @@ namespace Game {
 		return modified;
 	}
 
-	bool drawTextureSelector(uint32_t& setID, char textureName[64], bool& open) {
+	bool drawTextureSelector(uint32_t& setID, GameObject& obj, bool& open) {
 		bool modified = false;
 		Core::Application* app = Core::Application::getApplication();
 		Graphics::TextureManager& textureManager = app->getRenderer()->getTextureManager();
 
-
-		ImGui::Text("Texture %s", textureName);
+		ImGui::Text("Texture %s", obj.textureName);
 		ImGui::SameLine();
 
 		if (ImGui::Button("Select Texture")) {
@@ -361,32 +360,65 @@ namespace Game {
 
 		if (open) {
 
-			ImGui::Begin("Texture Selector", &open);
+			std::string windowNameWithUniqueID = std::format("Texture Selector###{}", (uint64_t)&obj);
+			ImGui::Begin(windowNameWithUniqueID.c_str(), &open);
+
+			static char setName[64] = "";
+
+			if(ImGui::BeginCombo("##Texture Set", textureManager.getTextureSetByID(setID).setName.c_str())) {
+				auto& textureSets = textureManager.getTextureSets();
+				for (auto& set : textureSets) {
+					if (ImGui::Selectable(set.setName.c_str(), set.setID == setID)) {
+						setID = set.setID;
+					}
+				}
+				ImGui::EndCombo();
+			}
+
+			ImGui::SameLine();
 
 			if (ImGui::Button("Create New Set")) {
-				setID = textureManager.createTextureSet();
-				textureManager.addTextureToSet(setID, "Texture");
+				ImGui::OpenPopup("Create New Set");
+				setName[0] = '\0';
 			}
-			auto& textureSets = textureManager.getTextureSets();
 
-			if (textureSets.size() != 0) {
-				if (ImGui::Button("Add Texture")) {
-					static int counter = 1;
-					std::string newName = std::format("Texture ({})", counter++);
+			if (ImGui::BeginPopup("Create New Set")) {
+				ImGui::InputText("Set Name", setName, 256);
 
-					textureManager.addTextureToSet(setID, newName);
+				if (ImGui::Button("Create")) {
+					setID = textureManager.createTextureSet(std::string(setName));
+					textureManager.saveTextureSet(setID, std::filesystem::path("TextureSets/" + std::string(setName) + ".txst"));
 				}
+				ImGui::EndPopup();
 			}
-
 
 			ImGui::Separator();
 
+			auto& textureSets = textureManager.getTextureSets();
 
 			if (textureSets.size() == 0) {
 				ImGui::Text("No texture sets loaded");
 				ImGui::End();
 				return modified;
 			}
+			else {
+				if (ImGui::Button("Save")) {
+					textureManager.saveTextureSet(setID, std::filesystem::path("TextureSets/" + textureManager.getTextureSetByID(setID).setName + ".txst"));
+				}
+
+				ImGui::SameLine();
+
+				if (textureSets.size() != 0) {
+					if (ImGui::Button("Add Texture")) {
+						static int counter = 1;
+						std::string newName = std::format("Texture ({})", counter++);
+
+						textureManager.addTextureToSet(setID, newName);
+					}
+				}
+			}
+
+			ImGui::Separator();
 
 			auto& textureSet = textureManager.getTextureSetByID(setID);
 
@@ -400,8 +432,8 @@ namespace Game {
 
 
 			for (auto& texture : textureSet.textures) {
-				if(drawTextureEntry(texture, textureName, setID)) {
-					strcpy_s(textureName, 64, texture.textureName.c_str());
+				if(drawTextureEntry(texture, obj.textureName, setID)) {
+					strcpy_s(obj.textureName, 64, texture.textureName.c_str());
 					modified = true;
 				}
 			}
@@ -449,7 +481,7 @@ namespace Game {
 		if (ImGui::CheckboxFlags("Static", (unsigned int*)&obj.flags, GameObjectFlags::Static)) modified += 1;
 
 		static bool m_TextureSelectorOpen = false;
-		modified += drawTextureSelector(m_TextureSetID, obj.textureName, m_TextureSelectorOpen);
+		modified += drawTextureSelector(m_TextureSetID, obj, m_TextureSelectorOpen);
 
 		ImGui::Text("Collider Properties");
 		ImGui::PushID("Collider");

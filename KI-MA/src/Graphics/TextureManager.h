@@ -18,6 +18,7 @@ namespace Graphics {
 	struct TextureSet {
 		uint32_t setID = 0;
 		std::vector<TextureSetEntry> textures;
+		std::string setName;
 	};
 
 	class TextureManager {
@@ -25,9 +26,12 @@ namespace Graphics {
 		TextureManager();
 		~TextureManager();
 
+		void beginTextureLoad();
+		void endTextureLoad();
+
 		void loadTextureSet(std::filesystem::path path);
 
-		uint32_t createTextureSet();
+		uint32_t createTextureSet(std::string setName);
 		void saveTextureSet(uint32_t setID, std::filesystem::path path);
 
 		void addTextureToSet(uint32_t setID, std::string name, std::filesystem::path path = "");
@@ -49,10 +53,15 @@ namespace Graphics {
 		uint32_t loadTextureFromPath(std::filesystem::path path);
 	private:
 
+		ID3D12CommandAllocator* m_UploadCmdAllocator = nullptr;
+		ID3D12GraphicsCommandList* m_UploadCmdList = nullptr;
+		ID3D12Fence* m_UploadFence = nullptr;
+		uint32_t m_UploadFenceValue = 0;
+		HANDLE m_UploadFenceEvent = nullptr;
+
 		std::vector<TextureSet> m_TextureSets;
 
 		std::vector<ID3D12Resource*> m_TextureResources;
-
 		std::vector<ID3D12Resource*> m_UploadBuffers;
 
 		ID3D12DescriptorHeap* m_SRVHeap = nullptr;

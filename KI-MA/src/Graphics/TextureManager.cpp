@@ -6,6 +6,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "external/stb_image.h"
 
+#include <fstream>
+
 namespace Graphics {
 	TextureManager::TextureManager()
 	{
@@ -22,6 +24,16 @@ namespace Graphics {
 		m_SRVHeapCPUStart = m_SRVHeap->GetCPUDescriptorHandleForHeapStart();
 		m_SRVHeapGPUStart = m_SRVHeap->GetGPUDescriptorHandleForHeapStart();
 		m_SRVDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_UploadCmdAllocator));
+		
+		device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_UploadCmdAllocator, nullptr, IID_PPV_ARGS(&m_UploadCmdList));
+		m_UploadCmdList->Close();
+
+		device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_UploadFence));
+
+		m_UploadFenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+
 	}
 
 	TextureManager::~TextureManager()
@@ -29,20 +41,122 @@ namespace Graphics {
 
 	}
 
-	void TextureManager::loadTextureSet(std::filesystem::path path)
+	void TextureManager::beginTextureLoad()
 	{
-
+		m_UploadCmdAllocator->Reset();
+		m_UploadCmdList->Reset(m_UploadCmdAllocator, nullptr);
 	}
 
-	uint32_t TextureManager::createTextureSet()
+	void TextureManager::endTextureLoad()
+	{
+		Core::Application* app = Core::Application::getApplication();
+		GraphicsContext* context = app->getGraphicsContext();
+
+		m_UploadCmdList->Close();
+
+		ID3D12CommandList* lists[] = { m_UploadCmdList };
+		context->getQueue()->ExecuteCommandLists(1, lists);
+
+		uint32_t fenceValue = ++m_UploadFenceValue;
+		context->getQueue()->Signal(m_UploadFence, fenceValue);
+
+		if (m_UploadFence->GetCompletedValue() < fenceValue) {
+			m_UploadFence->SetEventOnCompletion(fenceValue, m_UploadFenceEvent);
+			WaitForSingleObject(m_UploadFenceEvent, INFINITE);
+		}
+
+		for (auto* buffer : m_UploadBuffers)
+			buffer->Release();
+
+		m_UploadBuffers.clear();
+	}
+
+	uint32_t TextureManager::createTextureSet(std::string setName)
 	{
 		m_TextureSets.push_back(TextureSet{});
 		m_TextureSets.back().setID = static_cast<uint32_t>(m_TextureSets.size() - 1);
+		m_TextureSets.back().setName = setName;
 		return m_TextureSets.back().setID;
+	}
+
+	struct TextureSetHeader {
+		char magic[4];
+		uint32_t setID;
+		uint32_t textureCount;
+	};
+
+	void TextureManager::loadTextureSet(std::filesystem::path path)
+	{
+		std::ifstream file = std::ifstream(path.string().c_str(), std::ios::binary);
+
+		TextureSetHeader hdr = {};
+		file.read(reinterpret_cast<char*>(&hdr), sizeof(TextureSetHeader));
+		if(strncmp(hdr.magic, "TXST", 4) != 0) {
+			Core::Logger::Error("Invalid texture set file: {}", path.string());
+			return;
+		}
+
+		for (auto it = m_TextureSets.begin(); it != m_TextureSets.end(); ++it) {
+			if (it->setID == hdr.setID) {
+				m_TextureSets.erase(it);
+				break;
+			}
+		}
+
+		TextureSet set{};
+		set.setID = hdr.setID;
+		set.textures.resize(hdr.textureCount);
+		set.setName = path.stem().string();
+
+		for (auto& tex : set.textures) {
+			uint32_t nameSize = 0;
+			file.read(reinterpret_cast<char*>(&nameSize), sizeof(uint32_t));
+			tex.textureName.resize(nameSize);
+			file.read(tex.textureName.data(), nameSize);
+			uint32_t pathSize = 0;
+			file.read(reinterpret_cast<char*>(&pathSize), sizeof(uint32_t));
+			std::string pathStr(pathSize, '\0');
+			file.read(pathStr.data(), pathSize);
+			tex.texturePath = std::filesystem::path(pathStr);
+			if (std::filesystem::exists(tex.texturePath) == true) {
+				tex.textureID = loadTextureFromPath(tex.texturePath);
+			}
+			else Core::Logger::Warn("Missing Texture, {} not found.", tex.texturePath.string());
+		}
+
+		m_TextureSets.push_back(set);
 	}
 
 	void TextureManager::saveTextureSet(uint32_t setID, std::filesystem::path path)
 	{
+		TextureSet& set = getTextureSetByID(setID);
+
+		TextureSetHeader hdr = {};
+		hdr.magic[0] = 'T';
+		hdr.magic[1] = 'X';
+		hdr.magic[2] = 'S';
+		hdr.magic[3] = 'T';
+		hdr.setID = set.setID;
+		hdr.textureCount = static_cast<uint32_t>(set.textures.size());
+
+		if (std::filesystem::exists(path.parent_path()) == false) {
+			std::filesystem::create_directories(path.parent_path());
+		};
+
+		std::ofstream file = std::ofstream(path.string().c_str(), std::ios::binary | std::ios::trunc);
+
+		file.write(reinterpret_cast<char*>(&hdr), sizeof(TextureSetHeader));
+
+		for (auto& entry : set.textures) {
+			uint32_t nameSize = static_cast<uint32_t>(entry.textureName.size());
+			file.write(reinterpret_cast<char*>(&nameSize), sizeof(uint32_t));
+			file.write(entry.textureName.data(), nameSize);
+			uint32_t pathSize = static_cast<uint32_t>(entry.texturePath.string().size());
+			file.write(reinterpret_cast<char*>(&pathSize), sizeof(uint32_t));
+			file.write(entry.texturePath.string().data(), pathSize);
+		}
+
+		file.close();
 
 	}
 
@@ -67,7 +181,9 @@ namespace Graphics {
 		uint32_t textureID = 0;
 
 		if (std::filesystem::exists(path) == true) {
+			beginTextureLoad();
 			textureID = loadTextureFromPath(path);
+			endTextureLoad();
 		}
 		TextureSet& set = getTextureSetByID(setID);
 
@@ -86,7 +202,9 @@ namespace Graphics {
 		uint32_t textureID = 0;
 
 		if (std::filesystem::exists(newPath) == true) {
+			beginTextureLoad();
 			textureID = loadTextureFromPath(newPath);
+			endTextureLoad();
 		}
 
 		for (auto& entry : set.textures) {
@@ -156,7 +274,6 @@ namespace Graphics {
 		int32_t channels;
 		char* data = (char*)stbi_load(path.string().c_str(), &width, &height, &channels, 4);
 
-
 		D3D12_HEAP_PROPERTIES heapProperties = {};
 		heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -208,8 +325,19 @@ namespace Graphics {
 		dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 		dstLocation.SubresourceIndex = 0;
 
-		app->getRenderer()->getCmdList()->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
-		app->getRenderer()->transition(m_TextureResources.back(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		m_UploadCmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+
+		D3D12_RESOURCE_BARRIER barrier{};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+		barrier.Transition.pResource = m_TextureResources.back();
+		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+		// Die Resource Barrier an die Command List senden
+		m_UploadCmdList->ResourceBarrier(1, &barrier);
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;

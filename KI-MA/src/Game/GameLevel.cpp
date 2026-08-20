@@ -35,13 +35,14 @@ namespace Game {
 	void GameLevel::loadLevel(std::filesystem::path levelPath)
 	{
 		if (std::filesystem::exists(levelPath)) {
-			std::fstream file(levelPath, std::ios::in | std::ios::binary);
+			std::ifstream file(levelPath, std::ios::in | std::ios::binary);
 			file.seekg(0, std::ios::end);
 			uint32_t fileSize = file.tellg();
 			file.seekg(0, std::ios::beg);
 			file.read(reinterpret_cast<char*>(m_GameObjects.data()), fileSize);
 			m_ObjectCount = fileSize / sizeof(GameObject);
 			m_LastFreeIndex = m_ObjectCount;
+			file.close();
 		}
 		else {
 			m_FreeSlots.clear();
@@ -53,11 +54,12 @@ namespace Game {
 
 	void GameLevel::saveLevel(std::filesystem::path levelPath)
 	{
-		std::fstream file(levelPath, std::ios::out | std::ios::binary);
+		std::ofstream file(levelPath, std::ios::out | std::ios::binary);
 		optimizeLevel();
 
 		// Alles wird gespeichert, somit kann die Datei auch als gespeicherter Spielstand verwendet werden.
 		file.write(reinterpret_cast<char*>(m_GameObjects.data()), m_ObjectCount * sizeof(GameObject));
+		file.close();
 	}
 
 	void GameLevel::optimizeLevel()
