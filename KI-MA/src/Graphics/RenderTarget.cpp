@@ -15,6 +15,10 @@ namespace Graphics {
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = renderer->getNextRTVDescriptorHandle(m_RTVDescriptorIndex);
 		device->CreateRenderTargetView(m_RenderTarget.Get(), nullptr, rtvHandle);
 
+		D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = renderer->getNextDSVDescriptorHandle(m_DSVDescriptorIndex);
+		device->CreateDepthStencilView(m_DepthStencil.Get(), nullptr, dsvHandle);
+
+
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
@@ -39,6 +43,7 @@ namespace Graphics {
 		m_Size = size;
 		createRenderTarget(m_ClearColor);
 		device->CreateRenderTargetView(m_RenderTarget.Get(), nullptr, renderer->getRTVDescriptorHandle(m_RTVDescriptorIndex));
+		device->CreateDepthStencilView(m_DepthStencil.Get(), nullptr, renderer->getDSVDescriptorHandle(m_DSVDescriptorIndex));
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -83,7 +88,15 @@ namespace Graphics {
 			&clearValue, IID_PPV_ARGS(&m_RenderTarget)
 		);
 
+		resourceDesc.Format = DXGI_FORMAT_D32_FLOAT;
+		resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
+		D3D12_CLEAR_VALUE depthClearValue = {};
+		depthClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+		depthClearValue.DepthStencil.Depth = 1.0f;
+		depthClearValue.DepthStencil.Stencil = 0;
+
+		device->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClearValue, IID_PPV_ARGS(&m_DepthStencil));
 	}
 }
 

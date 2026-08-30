@@ -11,6 +11,12 @@ namespace Game {
 		DirectX::XMFLOAT2 hitPoint = { 0, 0 };
 	};
 
+	struct CollisionResult {
+		bool collided = false;
+		DirectX::XMFLOAT2 overlap = { 0, 0 };
+	};
+
+
 	class GamePhysics {
 	public:
 		static RaycastHit boxcast(GameLevel& level, const DirectX::XMFLOAT2& origin, const DirectX::XMFLOAT2& size, const DirectX::XMFLOAT2& direction, float maxDistance);
@@ -18,7 +24,9 @@ namespace Game {
 
 		static void updatePhysics(GameLevel& level, float deltaTime, float gravity);
 	private:
-		static bool checkCollision(const GameCollider& a, const GameObject& aObj, const GameCollider& b, const GameObject& bObj);
+		
+		static void resolveAxis(GameLevel& level, GameObject& a, float deltaTime, bool isYAxis, bool& noneCollided, bool& noneCollidedWithGround);
+		//static bool checkCollision(const GameCollider& a, const GameObject& aObj, const GameCollider& b, const GameObject& bObj);
 
 		/// <summary>
 		/// Gibt die Überlappung in X-Richtung zurück, wenn eine Kollision vorliegt. Ansonsten 0.
@@ -26,16 +34,7 @@ namespace Game {
 		/// <param name="a"></param>
 		/// <param name="b"></param>
 		/// <returns></returns>
-		static float checkCollisionX(const GameCollider& a, const GameObject& aObj, const GameCollider& b, const GameObject& bObj);
-
-
-		/// <summary>
-		/// Gibt die Überlappung in Y-Richtung zurück, wenn eine Kollision vorliegt. Ansonsten 0.
-		/// </summary>
-		/// <param name="a"></param>
-		/// <param name="b"></param>
-		/// <returns></returns>
-		static float checkCollisionY(const GameCollider& a, const GameObject& aObj, const GameCollider& b, const GameObject& bObj);
+		static CollisionResult checkCollision(const GameCollider& a, const GameObject& aObj, const GameCollider& b, const GameObject& bObj, bool yAxis);
 
 
 		/// <summary>

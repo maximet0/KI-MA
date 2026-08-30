@@ -3,7 +3,6 @@
 #include "Core/Logger.h"
 #include "Core/Application.h"
 #include "external/ImGui/backends/imgui_impl_dx12.h"
-
 #include <fstream>
 
 namespace Graphics {
@@ -35,6 +34,15 @@ namespace Graphics {
 		device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_RTVHeap));
 		m_RTVDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 		m_RTVHeapCPUStart = m_RTVHeap->GetCPUDescriptorHandleForHeapStart();
+
+		D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{};
+		dsvHeapDesc.NumDescriptors = 1024;
+		dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+
+		device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&m_DSVHeap));
+		m_DSVDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+		m_DSVHeapCPUStart = m_DSVHeap->GetCPUDescriptorHandleForHeapStart();
 
 
 		m_DefaultPipeline.setShaders("VertexShader.cso", "PixelShader.cso");
@@ -86,13 +94,8 @@ namespace Graphics {
 		settings.topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 		m_LinePipeline.recreatePipelineState(device.Get(), settings);
 
-
-		m_RectDataBuf = createBuffer(sizeof(RectData) * maxRects, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
-		m_RectDataBuf->Map(0, nullptr, reinterpret_cast<void**>(&m_RectDataPtr));
-
-		m_LineDataBuf = createBuffer(sizeof(LineData) * maxLines, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
-		m_LineDataBuf->Map(0, nullptr, reinterpret_cast<void**>(&m_LineDataPtr));
-
+		m_RectDataBuf = m_BufferManager.createBuffer(false, sizeof(RectData) * maxRects);
+		m_LineDataBuf = m_BufferManager.createBuffer(false, sizeof(LineData) * maxLines);
 	}
 
 	Renderer::~Renderer() {
@@ -117,7 +120,7 @@ namespace Graphics {
 		};
 
 		init_info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpu_desc_handle, D3D12_GPU_DESCRIPTOR_HANDLE gpu_desc_handle) {
-			// TODO: Implement Allocator
+			// TODO: Implement Free
 		};
 		ImGui_ImplDX12_Init(&init_info);
 	}
@@ -128,9 +131,8 @@ namespace Graphics {
 		Graphics::GraphicsContext* context = app->getGraphicsContext();
 
 		// CmdAllocator und CmdList zurücksetzen
-		m_CmdAllocators[frameIndex]->Reset();
-		m_CmdList->Reset(m_CmdAllocators[frameIndex], 0);
-
+		beginCmdList(frameIndex);
+		
 		// Descriptor Heap setzen
 		m_CmdList->SetDescriptorHeaps(1, &m_TextureManager.getSRVDescriptorHeap());
 
@@ -139,42 +141,24 @@ namespace Graphics {
 
 		m_LineCount = 0;
 		m_CurrentLineOffset = 0;
+
+		m_RectMappedMem = m_BufferManager.beginMappedWrite(m_RectDataBuf, sizeof(RectData) * maxRects);
+		m_LineMappedMem = m_BufferManager.beginMappedWrite(m_LineDataBuf, sizeof(LineData) * maxLines);
 	}
 
-
-	ID3D12Resource* Renderer::createBuffer(size_t size, D3D12_HEAP_TYPE type, D3D12_RESOURCE_STATES initState) {
-		Core::Application* app = Core::Application::getApplication();
-		D3D12_HEAP_PROPERTIES heapProperties = {};
-		heapProperties.Type = type;
-
-		D3D12_RESOURCE_DESC resourceDesc = {};
-		resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-		resourceDesc.Width = size;
-		resourceDesc.Height = 1;
-		resourceDesc.DepthOrArraySize = 1;
-		resourceDesc.MipLevels = 1;
-		resourceDesc.Format = DXGI_FORMAT_UNKNOWN;
-		resourceDesc.SampleDesc = { 1, 0 };
-		resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-		resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-		ID3D12Resource* buffer = nullptr;
-
-		app->getGraphicsContext()->getDevice()->CreateCommittedResource(
-			&heapProperties, D3D12_HEAP_FLAG_NONE, 
-			&resourceDesc, initState, 
-			nullptr, IID_PPV_ARGS(&buffer)
-		);
-
-		return buffer;
-	}
-
-
-	void Renderer::submitRect(DirectX::XMFLOAT2 position, DirectX::XMFLOAT2 size, uint32_t textureHandle)
+	void Renderer::submitRect(DirectX::XMFLOAT2 position, float zLayer, DirectX::XMFLOAT2 size, uint32_t textureHandle, bool repeatTexture)
 	{
-		m_RectDataPtr[m_RectCount].pos = { position.x + size.x / 2, position.y + size.y / 2 };
-		m_RectDataPtr[m_RectCount].size = size;
-		m_RectDataPtr[m_RectCount].textureID = textureHandle;
+		if (m_RectCount >= maxRects)
+			return;
+
+		DirectX::XMFLOAT2 texSize = m_TextureManager.getTextureSize(textureHandle);
+
+		RectData& rectData = ((RectData*)m_RectMappedMem.mappedMemory)[m_RectCount];
+		rectData.pos = { position.x + size.x / 2, position.y + size.y / 2 };
+		rectData.size = size;
+		rectData.textureScale = repeatTexture ? DirectX::XMFLOAT2{ size.x / texSize.x, size.y / texSize.y } : DirectX::XMFLOAT2{ 1.0f, 1.0f };
+		rectData.zLayer = zLayer;
+		rectData.textureID = textureHandle;
 
 		m_RectCount++;
 		m_CurrentRectCount++;
@@ -182,17 +166,22 @@ namespace Graphics {
 
 	void Renderer::submitLine(DirectX::XMFLOAT2 begin, DirectX::XMFLOAT2 end, uint32_t color)
 	{
-		m_LineDataPtr[m_LineCount].begin = begin;
-		m_LineDataPtr[m_LineCount].beginColor = color;
-		m_LineDataPtr[m_LineCount].end = end;
-		m_LineDataPtr[m_LineCount].endColor = color;
+		if (m_LineCount >= maxLines)
+			return;
+
+		LineData& lineData = ((LineData*)m_LineMappedMem.mappedMemory)[m_LineCount];
+		lineData.begin = begin;
+		lineData.beginColor = color;
+		lineData.end = end;
+		lineData.endColor = color;
 
 		m_LineCount++;
 		m_CurrentLineCount++;
 	}
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuf;
-	Microsoft::WRL::ComPtr<ID3D12Resource> indexBuf;
+
+	BufferHandle vertexBuf;
+	BufferHandle indexBuf;
 
 	void Renderer::drawRects() {
 		Core::Application* app = Core::Application::getApplication();
@@ -211,32 +200,31 @@ namespace Graphics {
 				2, 3, 0
 			};
 			
-			vertexBuf = createBuffer(sizeof(vertices), D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
-			indexBuf = createBuffer(sizeof(indices), D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+			vertexBuf = m_BufferManager.createBuffer(false, sizeof(vertices));
+			indexBuf = m_BufferManager.createBuffer(false, sizeof(indices));
+			
+			m_BufferManager.write(vertexBuf, vertices, 0, sizeof(vertices));
+			m_BufferManager.write(indexBuf, indices, 0, sizeof(indices));
 
-			void* mappedData;
-			vertexBuf->Map(0, nullptr, &mappedData);
-			memcpy(mappedData, vertices, sizeof(vertices));
-			vertexBuf->Unmap(0, nullptr);
-
-			indexBuf->Map(0, nullptr, &mappedData);
-			memcpy(mappedData, indices, sizeof(indices));
-			indexBuf->Unmap(0, nullptr);
+			m_BufferManager.transitionState(vertexBuf, D3D12_RESOURCE_STATE_GENERIC_READ);
+			m_BufferManager.transitionState(indexBuf, D3D12_RESOURCE_STATE_GENERIC_READ);
 		}
+
+		m_BufferManager.submitMappedWrite(m_RectMappedMem, 0, m_RectCount * sizeof(RectData));
 
 		m_DefaultPipeline.usePipeline(m_CmdList);
 
-		m_CmdList->SetGraphicsRootConstantBufferView(0, m_CurrentVPBuf->GetGPUVirtualAddress());
-		m_CmdList->SetGraphicsRootShaderResourceView(1, m_RectDataBuf->GetGPUVirtualAddress());
+		m_CmdList->SetGraphicsRootConstantBufferView(0, m_BufferManager.getBuffer(m_CurrentVPBuf)->GetGPUVirtualAddress());
+		m_CmdList->SetGraphicsRootShaderResourceView(1, m_BufferManager.getBuffer(m_RectDataBuf)->GetGPUVirtualAddress());
 
 
 		D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
-		vertexBufferView.BufferLocation = vertexBuf->GetGPUVirtualAddress();
+		vertexBufferView.BufferLocation = m_BufferManager.getBuffer(vertexBuf)->GetGPUVirtualAddress();
 		vertexBufferView.SizeInBytes = sizeof(float) * 16;
 		vertexBufferView.StrideInBytes = sizeof(float) * 4;
 
 		D3D12_INDEX_BUFFER_VIEW indexBufferView = {};
-		indexBufferView.BufferLocation = indexBuf->GetGPUVirtualAddress();
+		indexBufferView.BufferLocation = m_BufferManager.getBuffer(indexBuf)->GetGPUVirtualAddress();
 		indexBufferView.Format = DXGI_FORMAT_R32_UINT;
 		indexBufferView.SizeInBytes = sizeof(int) * 6;
 
@@ -251,12 +239,15 @@ namespace Graphics {
 
 	void Renderer::drawLines()
 	{
+		m_BufferManager.submitMappedWrite(m_LineMappedMem,0 , m_LineCount * sizeof(LineData));
+
+		
 		m_LinePipeline.usePipeline(m_CmdList);
 
-		m_CmdList->SetGraphicsRootConstantBufferView(0, m_CurrentVPBuf->GetGPUVirtualAddress());
+		m_CmdList->SetGraphicsRootConstantBufferView(0, m_BufferManager.getBuffer(m_CurrentVPBuf)->GetGPUVirtualAddress());
 
 		D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
-		vertexBufferView.BufferLocation = m_LineDataBuf->GetGPUVirtualAddress();
+		vertexBufferView.BufferLocation = m_BufferManager.getBuffer(m_LineDataBuf)->GetGPUVirtualAddress();
 		vertexBufferView.SizeInBytes = sizeof(LineData) * m_LineCount;
 		vertexBufferView.StrideInBytes = sizeof(LineData) / 2;
 
@@ -290,7 +281,6 @@ namespace Graphics {
 
 		m_CmdList->ClearRenderTargetView(rtv, color, 0, nullptr);
 
-
 		// Viewport und Scissor Rect setzen
 		D3D12_VIEWPORT viewport = {};
 		viewport.Height = (float)app->getWindow()->getSize().y;
@@ -311,15 +301,8 @@ namespace Graphics {
 		// Den Backbuffer in den Present State überführen
 		transition(app->getSwapchain()->getCurrentBackBuffer(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
-		m_CmdList->Close();
+		endCmdList();
 
-		ID3D12CommandList* lists[] = {
-			m_CmdList
-		};
-
-		// Die Command List an die GPU senden
-		app->getGraphicsContext()->getQueue()->ExecuteCommandLists(1, lists);
-		
 		g_FenceValue++;
 		app->getGraphicsContext()->getQueue()->Signal(m_Fence, g_FenceValue);
 		m_FenceValues[frameIndex] = g_FenceValue;
@@ -334,7 +317,9 @@ namespace Graphics {
 			m_Fence->SetEventOnCompletion(m_FenceValues[frameIndex], m_FenceEvent);
 			WaitForSingleObject(m_FenceEvent, INFINITE);
 		}
-		
+
+		frameIndex = app->getSwapchain()->getBackBufferIndex();
+		m_BufferManager.clearOldBuffers(frameIndex);
 	}
 
 	void Renderer::beginRenderTarget(RenderTarget* renderTarget, DirectX::XMFLOAT2 cameraPosition, float cameraZoom)
@@ -344,12 +329,14 @@ namespace Graphics {
 
 		transition(renderTarget->getRenderTarget(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 		auto rtv = getRTVDescriptorHandle(renderTarget->getRTVDescriptorIndex());
+		auto dsv = getDSVDescriptorHandle(renderTarget->getDSVDescriptorIndex());
 
-		m_CmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+		m_CmdList->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
 
 		DirectX::XMFLOAT4 clearColor = renderTarget->getClearColor();
 		float color[4] = { clearColor.x, clearColor.y, clearColor.z, clearColor.w };
 		m_CmdList->ClearRenderTargetView(rtv, color, 0, nullptr);
+		m_CmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		D3D12_VIEWPORT viewport = {};
 		viewport.Height = (float)renderTarget->getSize().y;
@@ -367,17 +354,14 @@ namespace Graphics {
 
 		m_CurrentRenderTarget = renderTarget;
 
-		m_CurrentVPBuf = createBuffer(sizeof(DirectX::XMMATRIX), D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+		m_CurrentVPBuf = m_BufferManager.createBuffer(true, sizeof(DirectX::XMMATRIX));
 
 		DirectX::XMMATRIX cameraView = DirectX::XMMatrixTranslation(-cameraPosition.x, -cameraPosition.y, 0.0f);
 		cameraView = cameraView * DirectX::XMMatrixScaling(cameraZoom, cameraZoom, 1.0f) ;
-		DirectX::XMMATRIX cameraProj = DirectX::XMMatrixOrthographicOffCenterLH(-(float)renderTarget->getSize().x * 0.5f, (float)renderTarget->getSize().x * 0.5f, (float)renderTarget->getSize().y * 0.5f, -(float)renderTarget->getSize().y * 0.5f, 0.0f, 1.0f);
+		DirectX::XMMATRIX cameraProj = DirectX::XMMatrixOrthographicOffCenterLH(-(float)renderTarget->getSize().x * 0.5f, (float)renderTarget->getSize().x * 0.5f, (float)renderTarget->getSize().y * 0.5f, -(float)renderTarget->getSize().y * 0.5f, 0.0f, 10.0f);
 		DirectX::XMMATRIX cameraVP = cameraView * cameraProj;
 
-		void* mappedData;
-		m_CurrentVPBuf->Map(0, nullptr, &mappedData);
-		memcpy(mappedData, &cameraVP, sizeof(DirectX::XMMATRIX));
-		m_CurrentVPBuf->Unmap(0, nullptr);
+		m_BufferManager.write(m_CurrentVPBuf, &cameraVP, 0, sizeof(DirectX::XMMATRIX));
 	}
 
 	void Renderer::endRenderTarget(RenderTarget* renderTarget)
@@ -416,6 +400,22 @@ namespace Graphics {
 		return handle;
 	}
 
+	D3D12_CPU_DESCRIPTOR_HANDLE Renderer::getDSVDescriptorHandle(uint32_t index)
+	{
+		D3D12_CPU_DESCRIPTOR_HANDLE handle = m_DSVHeapCPUStart;
+		handle.ptr += m_DSVDescriptorSize * index;
+		return handle;
+	}
+
+	D3D12_CPU_DESCRIPTOR_HANDLE Renderer::getNextDSVDescriptorHandle(uint32_t& index)
+	{
+		D3D12_CPU_DESCRIPTOR_HANDLE handle = m_DSVHeapCPUStart;
+		handle.ptr += m_RTVDescriptorSize * m_DSVHeapCurrentIndex;
+		index = m_DSVHeapCurrentIndex;
+		m_DSVHeapCurrentIndex++;
+		return handle;
+	}
+
 	void Renderer::transition(ID3D12Resource* res, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
 		D3D12_RESOURCE_BARRIER barrier	{};
 		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -428,6 +428,26 @@ namespace Graphics {
 
 		// Die Resource Barrier an die Command List senden
 		m_CmdList->ResourceBarrier(1, &barrier); 
+	}
+
+	void Renderer::beginCmdList(uint32_t frameIndex)
+	{
+		m_CmdAllocators[frameIndex]->Reset();
+		m_CmdList->Reset(m_CmdAllocators[frameIndex], nullptr);
+		cmdListOpen = true;
+	}
+
+	void Renderer::endCmdList()
+	{
+		cmdListOpen = false;
+		m_CmdList->Close();
+
+		ID3D12CommandList* lists[] = {
+			m_CmdList
+		};
+
+		Core::Application* app = Core::Application::getApplication();
+		app->getGraphicsContext()->getQueue()->ExecuteCommandLists(1, lists);
 	}
 
 }

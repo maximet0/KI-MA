@@ -3,6 +3,7 @@
 #include "Core/Application.h"
 
 #include "external/ImGui/ImGui.h"
+#include "external/ImGui/misc/cpp/imgui_stdlib.h"
 #include "Core/Logger.h"
 #include "Events/Callbacks.h"
 #include "GamePhysics.h"
@@ -46,12 +47,12 @@ namespace Game {
 			m_MouseWheelDelta.y += wheelDelta.y;
 			});
 
-		m_DrawObject.flags = (GameObjectFlags)(GameObjectFlags::Valid | GameObjectFlags::Static);
+		m_DrawObject.flags = GameObjectFlags::Static;
 		m_DrawObject.position = { 0, 0 };
 		m_DrawObject.size = { 32, 32 };
-		strcpy_s(m_DrawObject.textureName, "");
+		m_DrawObject.textureName = "";
 
-		m_DrawObject.collider.position = { 0, 0 };
+		m_DrawObject.collider.offset = { 0, 0 };
 		m_DrawObject.collider.size = { 32, 32 };
 
 
@@ -77,78 +78,20 @@ namespace Game {
 		m_GameSettings = settings;
 	}
 
-	//AABB Kollisionsabfrage
-	/*CollisionInfo checkCollision(GameObject a, GameObject b) {
-		CollisionInfo info;
-		info.hit = false;
-		info.direction = CollisionDirection::None;
-		info.overlap = 0.0f;
-
-		for (uint8_t i = 0; i < a.colliderCount; i++) {
-			for (uint8_t j = 0; j < b.colliderCount; j++) {
-				GameCollider colliderA = a.colliders[i];
-				GameCollider colliderB = b.colliders[j];
-				float aPosX = colliderA.position.x + a.position.x;
-				float aPosY = colliderA.position.y + a.position.y;
-
-				float bPosX = colliderB.position.x + b.position.x;
-				float bPosY = colliderB.position.y + b.position.y;
-
-				//Core::Logger::Debug("{} {} {} {}", aPosX, aPosY, bPosX, bPosY);
-				
-				if (aPosX < bPosX + colliderB.size.x &&
-					aPosX + colliderA.size.x > bPosX &&
-					aPosY < bPosY + colliderB.size.y &&
-					aPosY + colliderA.size.y > bPosY) {
-
-					info.hit = true;
-
-					float aCenterX = aPosX + colliderA.size.x / 2;
-					float aCenterY = aPosY + colliderA.size.y / 2;
-
-					float bCenterX = bPosX + colliderB.size.x / 2;
-					float bCenterY = bPosY + colliderB.size.y / 2;
-
-					float dx = aCenterX - bCenterX;
-					float dy = aCenterY - bCenterY;
-
-					float halfWidth = (colliderA.size.x + colliderB.size.x) * 0.5f;
-					float halfHeight = (colliderA.size.y + colliderB.size.y) * 0.5f;
-
-					float overlapX = halfWidth - std::abs(dx);
-					float overlapY = halfHeight - std::abs(dy);
-					
-					if (overlapX < overlapY) {
-						info.direction = (dx < 0.0f) ? CollisionDirection::Left : CollisionDirection::Right;
-						info.overlap = overlapX;
-						return info;
-					}
-					else {
-						info.direction = (dy < 0.0f) ? CollisionDirection::Bottom : CollisionDirection::Top;
-						info.overlap = overlapY;
-						return info;
-					}
-				}
-			}
-		}
-		return info;
-	}*/
-
-	float maxSpeed = 250.0f;
-	float acceleration = 1500.0f;
-	float deceleration = 2000.0f;
-	float jumpForce = 300.0f;
+	float maxSpeed = 300.0f;
+	float acceleration = 2500.0f;
+	float jumpForce = 450.0f;
 
 	float gracePeriod = 0.1f;
 
 	void GameInstance::update(float deltaTime)
 	{
 		if ((m_SimulationMode && !m_Paused) || !m_GameSettings.levelEditorMode) {
-			static int32_t playerID = -1;
-			if (playerID == -1) {
-				for (uint16_t i = 0; i < m_GameLevel.getGameObjectCount(); i++) {
-					if (m_GameLevel.getGameObjects()[i].flags & GameObjectFlags::Player) {
-						playerID = i;
+			static ObjectID playerID = 0;
+			if (playerID == 0) {
+				for (auto& obj : m_GameLevel.getGameObjects()) {
+					if (obj.flags & GameObjectFlags::Player) {
+						playerID = obj.id;
 						break;
 					}
 				}
@@ -156,10 +99,12 @@ namespace Game {
 
 			static bool grounded = false;
 
-			if (playerID != -1) {
-				GameObject& player = m_GameLevel.getGameObjects()[playerID];
+			if (playerID != 0) {
+				GameObject& player = m_GameLevel.getGameObject(playerID);
 				player.physics.acceleration.x = 0.0f;
 
+				if (grounded) acceleration = 2500.0f;
+				else acceleration = 800.0f;
 
 				if (keyDown[Events::KeyboardKey::Key_W] && (grounded || gracePeriod > 0.0f)) {
 					player.physics.velocity.y = -jumpForce;
@@ -169,21 +114,6 @@ namespace Game {
 				}
 				else if (keyDown[Events::KeyboardKey::Key_D]) {
 					player.physics.acceleration.x = acceleration;
-				}
-				else {
-					if (player.physics.velocity.x > 0.0f) {
-						player.physics.acceleration.x -= deceleration;
-					}
-					else if (player.physics.velocity.x < 0.0f) {
-						player.physics.acceleration.x += deceleration;
-					}
-				}
-
-
-				if (!keyDown[Events::KeyboardKey::Key_A] && !keyDown[Events::KeyboardKey::Key_D])
-				{
-					if (std::abs(player.physics.velocity.x) < deceleration * deltaTime)
-						player.physics.velocity.x = 0;
 				}
 
 				player.physics.velocity.x = std::clamp(player.physics.velocity.x, -maxSpeed, maxSpeed);
@@ -199,66 +129,26 @@ namespace Game {
 			GamePhysics::updatePhysics(m_GameLevel, deltaTime, m_Gravity);
 
 
-			if (playerID != -1) {
+			if (playerID != 0) {
 				//Ground Check
-				GameObject& player = m_GameLevel.getGameObjects()[playerID];
+				GameObject& player = m_GameLevel.getGameObject(playerID);
 
 				RaycastHit hit = GamePhysics::boxcast(m_GameLevel, { player.position.x, player.position.y + player.size.y + 0.02f }, { player.size.x * 0.9f, 0.02f }, { 0, 1 }, 5.0f);
 				grounded = hit.hit;
 				if (grounded) {
 					gracePeriod = 0.1f;
 				}
-				
-				if(!grounded) gracePeriod -= deltaTime;
-				
+				else {
+					gracePeriod -= deltaTime;
+				}
+
 			}
 			
 			GameTriggers::updateTriggers(*this, deltaTime);
-
-			/*grounded = false;
-			uint16_t validIndex = 0;
-			for (uint16_t i = 0; i < m_GameLevel.getGameObjectCount(); i++) {
-				GameObject& obj = m_GameLevel.getGameObjects()[i];
-				if (!obj.isStatic) {
-
-					//obj.physics.velocity.x *= 0.9f;
-					obj.physics.velocity.x += obj.physics.acceleration.x * deltaTime;
-					obj.physics.velocity.y += (m_Gravity + obj.physics.acceleration.y) * deltaTime;
-
-					obj.position.x += obj.physics.velocity.x * deltaTime;
-					obj.position.y += obj.physics.velocity.y * deltaTime;
-
-					for (uint16_t j = 0; j < m_GameLevel.getGameObjectCount(); j++) {
-						if (j == i) continue;
-						CollisionInfo collision = checkCollision(obj, m_GameLevel.getGameObjects()[j]);
-						if (!collision.hit) continue;
-						if (collision.direction == CollisionDirection::Bottom) {
-							obj.physics.velocity.y = 0;
-							obj.position.y -= collision.overlap;
-							if(i == playerID) grounded = true;
-						}
-						else if (collision.direction == CollisionDirection::Left) {
-							obj.physics.velocity.x = 0;
-							obj.position.x -= collision.overlap;
-						}
-						else if (collision.direction == CollisionDirection::Right) {
-							obj.physics.velocity.x = 0;
-							obj.position.x += collision.overlap;
-						}
-						else if (collision.direction == CollisionDirection::Top) {
-							obj.physics.velocity.y = 0;
-							obj.position.y += collision.overlap;
-						}
-					}
-
-
-				}
-			}*/
-
 		}
 	}
 
-	bool drawTextureEntry(Graphics::TextureSetEntry& tex, char textureName[64], uint32_t setID) {
+	bool drawTextureEntry(Graphics::TextureSetEntry& tex, std::string textureName, uint32_t setID) {
 		bool modified = false;
 		Core::Application* app = Core::Application::getApplication();
 		Graphics::TextureManager& textureManager = app->getRenderer()->getTextureManager();
@@ -281,7 +171,7 @@ namespace Game {
 		if (ImGui::IsItemHovered()) {
 			col = ImGui::GetColorU32(ImGuiCol_HeaderHovered);
 		}
-		else if (tex.textureName == std::string(textureName)) {
+		else if (tex.textureName == textureName) {
 			col = ImGui::GetColorU32(ImGuiCol_HeaderActive);
 		}
 	
@@ -334,7 +224,7 @@ namespace Game {
 
 		if (ImGui::BeginPopup("Rename Texture")) {
 			if (newPath[0] == '\0') strcpy_s(newPath, sizeof(newPath), tex.textureName.c_str());
-			ImGui::InputText("New Name", newPath, 256);
+			ImGui::InputText("New Name", &tex.textureName);
 
 			if (ImGui::Button("Rename")) {
 				textureManager.modifyTextureInSet(setID, tex.textureName, std::string(newPath), tex.texturePath);
@@ -351,7 +241,7 @@ namespace Game {
 		Core::Application* app = Core::Application::getApplication();
 		Graphics::TextureManager& textureManager = app->getRenderer()->getTextureManager();
 
-		ImGui::Text("Texture %s", obj.textureName);
+		ImGui::Text("Texture %s", obj.textureName.c_str());
 		ImGui::SameLine();
 
 		if (ImGui::Button("Select Texture")) {
@@ -360,7 +250,7 @@ namespace Game {
 
 		if (open) {
 
-			std::string windowNameWithUniqueID = std::format("Texture Selector###{}", (uint64_t)&obj);
+			std::string windowNameWithUniqueID = std::format("Texture Selector {}", (uint64_t)obj.id);
 			ImGui::Begin(windowNameWithUniqueID.c_str(), &open);
 
 			static char setName[64] = "";
@@ -383,7 +273,7 @@ namespace Game {
 			}
 
 			if (ImGui::BeginPopup("Create New Set")) {
-				ImGui::InputText("Set Name", setName, 256);
+				ImGui::InputText("Set Name", setName, 64);
 
 				if (ImGui::Button("Create")) {
 					setID = textureManager.createTextureSet(std::string(setName));
@@ -433,7 +323,7 @@ namespace Game {
 
 			for (auto& texture : textureSet.textures) {
 				if(drawTextureEntry(texture, obj.textureName, setID)) {
-					strcpy_s(obj.textureName, 64, texture.textureName.c_str());
+					obj.textureName = texture.textureName;
 					modified = true;
 				}
 			}
@@ -447,31 +337,33 @@ namespace Game {
 
 	}
 
-	bool GameInstance::drawObjectProperties(GameObject& obj, bool pos) {
+	bool GameInstance::drawObjectProperties(GameObject& obj, bool pos, bool& textureSelectorOpen) {
 		int modified = 0;
 
 		ImGui::PushID(&obj);
 
-		ImGui::InputText("Name", obj.objectName, 64);
+		ImGui::InputText("Name", &obj.objectName);
 
 		if (pos) {
-			if (ImGui::DragFloat2("Position", &obj.position.x, m_GridLock ? 8.0f : 1.0f) ) {
+			if (ImGui::DragFloat2("Position", &obj.position.x, 2.0f)) modified += 1;
+
+			if (ImGui::IsItemDeactivatedAfterEdit() && m_GridLock) {
+				obj.position.x = std::floor(obj.position.x / 32.0f) * 32.0f;
+				obj.position.y = std::floor(obj.position.y / 32.0f) * 32.0f;
 				modified += 1;
-				if (m_GridLock) {
-					obj.position.x = std::floor(obj.position.x / 32.0f) * 32.0f;
-					obj.position.y = std::floor(obj.position.y / 32.0f) * 32.0f;
-				}
-				
 			}
+
 		}
-		if (ImGui::DragFloat2("Size", &obj.size.x, m_GridLock ? 8.0f : 1.0f)) {
+		if (ImGui::DragFloat2("Size", &obj.size.x, 2.0f)) modified += 1;
+
+		if (ImGui::IsItemDeactivatedAfterEdit() && m_GridLock) {
+			obj.size.x = std::floor(obj.size.x / 32.0f) * 32.0f;
+			obj.size.y = std::floor(obj.size.y / 32.0f) * 32.0f;
 			modified += 1;
-			if (m_GridLock) {
-				obj.size.x = std::floor(obj.size.x / 32.0f) * 32.0f;
-				obj.size.y = std::floor(obj.size.y / 32.0f) * 32.0f;
-			}
 		}
-	
+
+		modified = ImGui::InputInt("Trigger Group", (int*)&obj.triggerGroup);
+
 		if (ImGui::CheckboxFlags("Background", (unsigned int*)&obj.flags, GameObjectFlags::Background)) modified += 1;
 		ImGui::SameLine();
 		if (ImGui::CheckboxFlags("Player", (unsigned int*)&obj.flags, GameObjectFlags::Player)) modified += 1;
@@ -480,28 +372,26 @@ namespace Game {
 		ImGui::SameLine();
 		if (ImGui::CheckboxFlags("Static", (unsigned int*)&obj.flags, GameObjectFlags::Static)) modified += 1;
 
-		static bool m_TextureSelectorOpen = false;
-		modified += drawTextureSelector(m_TextureSetID, obj, m_TextureSelectorOpen);
+
+
+		//static bool m_TextureSelectorOpen = false;
+		modified += drawTextureSelector(m_TextureSetID, obj, textureSelectorOpen);
+
+		if (ImGui::Checkbox("Repeat Texture", &obj.repeatTexture)) modified += 1;
 
 		ImGui::Text("Collider Properties");
 		ImGui::PushID("Collider");
-		modified += ImGui::DragFloat2("Position", &obj.collider.position.x, 0.5f);
+		modified += ImGui::DragFloat2("Offset", &obj.collider.offset.x, 0.5f);
 		modified += ImGui::DragFloat2("Size", &obj.collider.size.x, 0.5f);
 		ImGui::PopID();
 
 		if (obj.flags & GameObjectFlags::Trigger) {
 			ImGui::Text("Triggers");
 			ImGui::PushID("Triggers");
-			for (uint32_t i = 0; i < obj.triggers.size(); i++) {
-				ImGui::PushID(i);
-				if (obj.triggers[i].type == TriggerType::None) {
-					if (ImGui::Button("Add Trigger")) {
-						obj.triggers[i].type = TriggerType::CameraTrigger;
-						modified += 1;
-					}
-					ImGui::PopID();
-					break;
-				}
+			for (auto it = obj.triggers.begin(); it != obj.triggers.end(); it++) {
+				std::shared_ptr<TriggerBase>& trigger = *it;
+
+				ImGui::PushID(trigger.get());
 
 				ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_FramePadding;
 				float contentRegionAvailX = ImGui::GetContentRegionAvail().x;
@@ -510,69 +400,87 @@ namespace Game {
 				ImGui::SameLine(contentRegionAvailX - ImGui::CalcTextSize("X").x);
 
 				if (ImGui::Button("X")){
-					obj.triggers[i].type = TriggerType::None;
+					it = obj.triggers.erase(it);
 					modified += 1;
+					if (it == obj.triggers.end()) {
+						if(open) ImGui::TreePop();
+						ImGui::PopID();
+						break;
+					}
 				};
 				if (open) {
-					if (ImGui::Combo("Trigger Type", (int*)&obj.triggers[i].type, "None\0Camera Trigger\0Object Move Trigger\0Score Trigger\0Finish Trigger\0Damage Trigger\0")) {
-						modified += 1;
-					}
-
-					if(ImGui::Combo("Trigger Condition", (int*)&obj.triggers[i].condition, "None\0On Enter\0On Exit\0On Stay\0")) {
-						modified += 1;
-					}
-
-					modified += ImGui::Checkbox("Single Use", &obj.triggers[i].singleUse);
-
-					switch (obj.triggers[i].type) {
-					case TriggerType::CameraTrigger:
-						modified += ImGui::Checkbox("Follow Player", &obj.triggers[i].cameraTrigger.followPlayer);
-						modified += ImGui::DragFloat2("Camera Position", &obj.triggers[i].cameraTrigger.targetPosition.x, 1.0f);
-						modified += ImGui::DragFloat("Transition Time (s)", &obj.triggers[i].cameraTrigger.transitionTime, 0.1f);
-						modified += ImGui::DragFloat("Target Zoom", &obj.triggers[i].cameraTrigger.targetZoom, 0.1f);
-						break;
-					case TriggerType::ObjectMoveTrigger: {
-
-						modified += ImGui::Checkbox("Loop", &obj.triggers[i].objectMoveTrigger.loop);
-
-						for (uint32_t j = 0; j < obj.triggers[i].objectMoveTrigger.targetCount; j++) {
-							ImGui::PushID(j);
-							modified += ImGui::InputInt("Target Object ID", (int*)&obj.triggers[i].objectMoveTrigger.targetObjectIDs[j]);
-							ImGui::PopID();
+					if (ImGui::Combo("Trigger Type", (int*)&trigger->type, "None\0Camera Trigger\0Object Move Trigger\0Score Trigger\0Finish Trigger\0Damage Trigger\0")) {
+						switch (trigger->type) {
+						case TriggerType::CameraTrigger:
+							trigger = std::make_unique<CameraTrigger>();
+							break;
+						case TriggerType::ObjectMoveTrigger:
+							trigger = std::make_unique<ObjectMoveTrigger>();
+							break;
+						case TriggerType::ScoreTrigger:
+							trigger = std::make_unique<ScoreTrigger>();
+							break;
+						case TriggerType::FinishTrigger:
+							trigger = std::make_unique<FinishTrigger>();
+							break;
+						case TriggerType::DamageTrigger:
+							trigger = std::make_unique<DamageTrigger>();
+							break;
 						}
-						if (obj.triggers[i].objectMoveTrigger.targetCount < 32) {
-							if (ImGui::Button("Add Target Object ID")) {
-								obj.triggers[i].objectMoveTrigger.targetCount++;
-								modified += 1;
+						modified += 1;
+					}
+
+					if(ImGui::Combo("Trigger Condition", (int*)&trigger->condition, "None\0On Enter\0On Exit\0On Stay\0")) {
+						modified += 1;
+					}
+
+					modified += ImGui::Checkbox("Single Use", &trigger->singleUse);
+
+					switch (trigger->type) {
+						case TriggerType::CameraTrigger: {
+							CameraTrigger* cameraTrigger = static_cast<CameraTrigger*>(trigger.get());
+							modified += ImGui::Checkbox("Follow Player", &cameraTrigger->followPlayer);
+							modified += ImGui::DragFloat2("Camera Position", &cameraTrigger->targetPosition.x, 1.0f);
+							modified += ImGui::DragFloat("Transition Time (s)", &cameraTrigger->transitionTime, 0.1f);
+							modified += ImGui::DragFloat("Target Zoom", &cameraTrigger->targetZoom, 0.1f);
+							break;
+						}
+						case TriggerType::ObjectMoveTrigger: {
+							ObjectMoveTrigger* objectMoveTrigger = static_cast<ObjectMoveTrigger*>(trigger.get());
+							modified += ImGui::Checkbox("Loop", &objectMoveTrigger->loop);
+
+							modified += ImGui::InputInt("Target Group ID", (int*)&objectMoveTrigger->targetGroupID);
+
+							for (uint32_t j = 0; j < objectMoveTrigger->pathPoints.size(); j++) {
+								ImGui::PushID(j);
+								modified += ImGui::DragFloat2("Target Position", &objectMoveTrigger->pathPoints[j].position.x, 1.0f);
+								modified += ImGui::DragFloat("Move Time (s)", &objectMoveTrigger->pathPoints[j].moveTime, 0.1f);
+								ImGui::PopID();
 							}
-						}	
-
-						for (uint32_t j = 0; j < obj.triggers[i].objectMoveTrigger.targetCount; j++) {
-							ImGui::PushID(j);
-							modified += ImGui::DragFloat2("Target Position", &obj.triggers[i].objectMoveTrigger.pathPoints[j].position.x, 1.0f);
-							modified += ImGui::DragFloat("Move Time (s)", &obj.triggers[i].objectMoveTrigger.pathPoints[j].moveTime, 0.1f);
-							ImGui::PopID();
-						}
 						
-						if (obj.triggers[i].objectMoveTrigger.targetCount < 16) {
 							if (ImGui::Button("Add Path Point")) {
-								obj.triggers[i].objectMoveTrigger.targetCount++;
+								objectMoveTrigger->pathPoints.push_back(MovePoint());
 								modified += 1;
 							}
-						}	
 
-						break;
-					}
-					case TriggerType::DamageTrigger:
-						ImGui::InputInt("Change Amount", (int*)&obj.triggers[i].damageTrigger.damageAmount);
-						break;
-					case TriggerType::ScoreTrigger:
-						ImGui::InputInt("Score Change Amount", (int*)&obj.triggers[i].scoreTrigger.scoreAmount);
-						break;
-					case TriggerType::FinishTrigger:
-						ImGui::InputInt("Minimum Score", (int*)&obj.triggers[i].finishTrigger.minimumScore);
-						ImGui::InputText("Next Level Path", (char*)obj.triggers[i].finishTrigger.nextLevelPath, 256);
-						break;
+							break;
+						}
+						case TriggerType::DamageTrigger: {
+							DamageTrigger* damageTrigger = static_cast<DamageTrigger*>(trigger.get());
+							ImGui::InputInt("Change Amount", (int*)&damageTrigger->damageAmount);
+							break;
+						}
+						case TriggerType::ScoreTrigger: {
+							ScoreTrigger* scoreTrigger = static_cast<ScoreTrigger*>(trigger.get());
+							ImGui::InputInt("Score Change Amount", (int*)&scoreTrigger->scoreAmount);
+							break;
+						}
+						case TriggerType::FinishTrigger: {
+							FinishTrigger* finishTrigger = static_cast<FinishTrigger*>(trigger.get());
+							ImGui::InputInt("Minimum Score", (int*)&finishTrigger->minimumScore);
+							ImGui::InputText("Next Level Path", &finishTrigger->nextLevelPath);
+							break;
+						}
 					}
 
 					ImGui::Separator();
@@ -581,6 +489,12 @@ namespace Game {
 
 				ImGui::PopID();
 			}
+
+			if (ImGui::Button("Add Trigger")) {
+				obj.triggers.push_back(std::make_shared<TriggerBase>());
+				modified += 1;
+			}
+
 			ImGui::PopID();
 		}
 
@@ -617,10 +531,15 @@ namespace Game {
 				}
 			}
 			ImGui::SameLine();
+
+			if (m_SimulationMode) ImGui::BeginDisabled();
+
 			if (ImGui::Button("Save Level")) {
 				m_GameLevel.saveLevel(m_GameSettings.levelPath);
 				m_LevelSaved = true;
 			}
+			
+			if (m_SimulationMode) ImGui::EndDisabled();
 
 			ImGui::Separator();
 
@@ -634,7 +553,7 @@ namespace Game {
 				ImGui::SameLine();
 
 				if (ImGui::Button("Reset Simulation")) {
-					m_GameLevel = m_SavedLevel;
+					m_GameLevel.loadLevel("tmpSimSave.lvl");
 					m_CameraPosition = { 0, 0 };
 					m_CameraFollowPlayer = true;
 				}
@@ -642,7 +561,7 @@ namespace Game {
 				ImGui::SameLine();
 
 				if(ImGui::Button("Stop Simulation")) {
-					m_GameLevel = m_SavedLevel;
+					m_GameLevel.loadLevel("tmpSimSave.lvl");
 					m_SimulationMode = false;
 					m_CameraPosition = { 0, 0 };
 					m_CameraFollowPlayer = false;
@@ -650,8 +569,7 @@ namespace Game {
 			}
 			else {
 				if (ImGui::Button("Start Simulation")) {
-					m_GameLevel.optimizeLevel();
-					m_SavedLevel = m_GameLevel;
+					m_GameLevel.saveLevel("tmpSimSave.lvl", true);
 					m_SimulationMode = true;
 					m_CameraFollowPlayer = true;
 				}
@@ -661,7 +579,8 @@ namespace Game {
 			ImGui::Checkbox("Draw Mode", &m_DrawMode);
 			if (m_DrawMode) {
 				ImGui::Text("Draw Object Properties");
-				drawObjectProperties(m_DrawObject, false);
+				static bool textureSelectorOpen = false;
+				drawObjectProperties(m_DrawObject, false, textureSelectorOpen);
 
 			}
 
@@ -673,10 +592,6 @@ namespace Game {
 				currentSettings = m_GameSettings;
 			}
 
-			auto& gameObjects = m_GameLevel.getGameObjects();
-			uint16_t objectCount = m_GameLevel.getGameObjectCount();
-
-			uint16_t validIndex = 0;
 
 			ImGui::Begin("Game");
 			auto textureHandle = renderer->getTextureManager().getSRVGPUDescriptorHandle(m_Target->getSRVDescriptorIndex());
@@ -700,19 +615,15 @@ namespace Game {
 			DirectX::XMStoreFloat2(&worldPos, worldPosVec);
 
 
-			static int32_t selectedIndex = -1;
-			int32_t clickedIndex = -1;
+			static ObjectID selectedID = 0;
+			ObjectID clickedID = 0;
 			if (gameViewLeftMouseDown || gameViewRightMouseDown) {
-				//Core::Logger::Debug("{} {}", relMousePos.x, relMousePos.y);
-				validIndex = objectCount;
-				for (int32_t i = maxGameObjects - 1; i >= 0 && validIndex >= 0; i--) {
-					if (gameObjects[i].flags & GameObjectFlags::Valid) validIndex--;
-					else continue;
 
-					if (worldPos.x >= gameObjects[i].position.x && worldPos.x <= gameObjects[i].position.x + gameObjects[i].size.x &&
-						worldPos.y >= gameObjects[i].position.y && worldPos.y <= gameObjects[i].position.y + gameObjects[i].size.y) {
-						if(gameViewLeftMouseDown) selectedIndex = i;
-						clickedIndex = i;
+				for (auto& obj : m_GameLevel.getGameObjects()) {
+					if (worldPos.x >= obj.position.x && worldPos.x <= obj.position.x + obj.size.x &&
+						worldPos.y >= obj.position.y && worldPos.y <= obj.position.y + obj.size.y) {
+						if (gameViewLeftMouseDown) selectedID = obj.id;
+						clickedID = obj.id;
 						break;
 					}
 				}
@@ -738,7 +649,7 @@ namespace Game {
 
 			if (m_DrawMode) {
 				//ImGui::
-				if (gameViewLeftMouseDown && clickedIndex == -1) {
+				if (gameViewLeftMouseDown && clickedID == 0) {
 					
 					m_DrawObject.position.x = worldPos.x;
 					m_DrawObject.position.y = worldPos.y;
@@ -751,9 +662,9 @@ namespace Game {
 					m_GameLevel.addGameObject(m_DrawObject);
 					m_LevelSaved = false;
 				}
-				if (gameViewRightMouseDown && clickedIndex != -1) {
-					m_GameLevel.removeGameObject(clickedIndex);
-					selectedIndex = -1;
+				if (gameViewRightMouseDown && clickedID != 0) {
+					m_GameLevel.removeGameObject(clickedID);
+					selectedID = 0;
 					m_LevelSaved = false;
 				}
 			}
@@ -765,34 +676,28 @@ namespace Game {
 
 			if (ImGui::Button("Add Object")) {
 				GameObject defaultObj;
-				defaultObj.flags = (GameObjectFlags)(GameObjectFlags::Valid | GameObjectFlags::Static);
+				defaultObj.flags = GameObjectFlags::Static;
 				defaultObj.position = { 0, 0 };
 				defaultObj.size = { 32, 32 };
-				strcpy_s(defaultObj.textureName, "");
+				defaultObj.textureName = "";
 
-				defaultObj.collider.position = { 0, 0 };
+				defaultObj.collider.offset = { 0, 0 };
 				defaultObj.collider.size = { 32, 32 };
 
 				m_GameLevel.addGameObject(defaultObj);
 				m_LevelSaved = false;
 			}
 
-			objectCount = m_GameLevel.getGameObjectCount();
+			if (ImGui::TreeNodeEx("GameObjects", ImGuiTreeNodeFlags_DefaultOpen, "GameObjects (%d)", m_GameLevel.getGameObjectCount())) {
 
-			validIndex = 0;
-			if (ImGui::TreeNodeEx("GameObjects", ImGuiTreeNodeFlags_DefaultOpen, "GameObjects (%d)", objectCount)) {
-
-				for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-					if ((gameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
-					validIndex++;
-
+				for (auto& obj : m_GameLevel.getGameObjects()) {
 					ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-					if (selectedIndex == i) nodeFlags |= ImGuiTreeNodeFlags_Selected;
+					if (selectedID == obj.id) nodeFlags |= ImGuiTreeNodeFlags_Selected;
 
-					ImGui::TreeNodeEx((void*)(intptr_t)i, nodeFlags, "gameObject", i);
+					ImGui::TreeNodeEx((void*)(intptr_t)obj.id, nodeFlags, obj.objectName.c_str(), obj.id);
 
 					if (ImGui::IsItemClicked()) {
-						selectedIndex = i;
+						selectedID = obj.id;
 					}
 				}
 				ImGui::TreePop();
@@ -811,8 +716,9 @@ namespace Game {
 
 			ImGui::Begin("Object Properties");
 
-			if (selectedIndex != -1) {
-				if (drawObjectProperties(gameObjects[selectedIndex], true)) {
+			if (selectedID != 0) {
+				static bool textureSelectorOpen = false;
+				if (drawObjectProperties(m_GameLevel.getGameObject(selectedID), true, textureSelectorOpen)) {
 					m_LevelSaved = false;
 				}
 			}
@@ -876,41 +782,14 @@ namespace Game {
 
 		renderer->beginRenderTarget(m_Target, m_CameraPosition, 1.0f / m_CameraZoom);
 
-		auto& gameObjects = m_GameLevel.getGameObjects();
-		uint16_t objectCount = m_GameLevel.getGameObjectCount();
+		for (auto& obj : m_GameLevel.getGameObjects()) {
+			uint32_t textureHandle = renderer->getTextureManager().getTextureIDFromSet(m_TextureSetID, obj.textureName);
 
-		uint16_t validIndex = 0;
-		//Hintergrund -> Terrain -> Spieler //TODO: Z-Layer im Renderer
-		for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-			if ((gameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
-			validIndex++;
+			float zLayer = 3.0f;
+			if (obj.flags & GameObjectFlags::Background) zLayer = 5.0f;
+			if (obj.flags & GameObjectFlags::Player) zLayer = 2.0f;
 
-			if (gameObjects[i].flags & GameObjectFlags::Background) {
-				uint32_t textureHandle = renderer->getTextureManager().getTextureIDFromSet(m_TextureSetID, gameObjects[i].textureName);
-				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, textureHandle);
-			}
-		}
-
-		validIndex = 0;
-		for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-			if ((gameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
-			validIndex++;
-
-			if ((gameObjects[i].flags & GameObjectFlags::Background) == 0) {
-				uint32_t textureHandle = renderer->getTextureManager().getTextureIDFromSet(m_TextureSetID, gameObjects[i].textureName);
-				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, textureHandle);
-			}
-		}
-
-		validIndex = 0;
-		for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
-			if ((gameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
-			validIndex++;
-
-			if (gameObjects[i].flags & GameObjectFlags::Player) {
-				uint32_t textureHandle = renderer->getTextureManager().getTextureIDFromSet(m_TextureSetID, gameObjects[i].textureName);
-				renderer->submitRect(gameObjects[i].position, gameObjects[i].size, textureHandle);
-			}
+			renderer->submitRect(obj.position, zLayer, obj.size, textureHandle, obj.repeatTexture);
 		}
 
 		if (m_GameSettings.levelEditorMode) {
@@ -941,22 +820,17 @@ namespace Game {
 
 		}
 
-		validIndex = 0;
 		if (m_GameSettings.showColliders) {
-			for (uint16_t i = 0; i < maxGameObjects && validIndex < objectCount; i++) {
+			for (auto& obj : m_GameLevel.getGameObjects()) {
 				uint32_t color = 0x00FF00FF;
-				if ((gameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
-				if ((gameObjects[i].flags & GameObjectFlags::Trigger) != 0) color = 0xFF0000FF;
-				if ((gameObjects[i].flags & GameObjectFlags::Static) == 0) color = 0x0000FFFF;
-				validIndex++;
-				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, color);
-				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, color);
-				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x + gameObjects[i].collider.size.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, color);
-				renderer->submitLine({ gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y + gameObjects[i].collider.size.y }, { gameObjects[i].position.x + gameObjects[i].collider.position.x, gameObjects[i].position.y + gameObjects[i].collider.position.y }, color);
+				if ((obj.flags & GameObjectFlags::Trigger) != 0) color = 0xFF0000FF;
+				if ((obj.flags & GameObjectFlags::Static) == 0) color = 0x0000FFFF;
+				renderer->submitLine({ obj.position.x + obj.collider.offset.x, obj.position.y + obj.collider.offset.y }, { obj.position.x + obj.collider.offset.x + obj.collider.size.x, obj.position.y + obj.collider.offset.y }, color);
+				renderer->submitLine({ obj.position.x + obj.collider.offset.x + obj.collider.size.x, obj.position.y + obj.collider.offset.y }, { obj.position.x + obj.collider.offset.x + obj.collider.size.x, obj.position.y + obj.collider.offset.y + obj.collider.size.y }, color);
+				renderer->submitLine({ obj.position.x + obj.collider.offset.x + obj.collider.size.x, obj.position.y + obj.collider.offset.y + obj.collider.size.y }, { obj.position.x + obj.collider.offset.x, obj.position.y + obj.collider.offset.y + obj.collider.size.y }, color);
+				renderer->submitLine({ obj.position.x + obj.collider.offset.x, obj.position.y + obj.collider.offset.y + obj.collider.size.y }, { obj.position.x + obj.collider.offset.x, obj.position.y + obj.collider.offset.y }, color);
 			}
 		}
-
-		//renderer->submitLine({ 0, 0 }, { 1280, 720 }, 0xFFFFFFFF);
 
 		renderer->drawRects();
 		renderer->drawLines();

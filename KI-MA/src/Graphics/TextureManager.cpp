@@ -25,11 +25,6 @@ namespace Graphics {
 		m_SRVHeapGPUStart = m_SRVHeap->GetGPUDescriptorHandleForHeapStart();
 		m_SRVDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-		device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_UploadCmdAllocator));
-		
-		device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_UploadCmdAllocator, nullptr, IID_PPV_ARGS(&m_UploadCmdList));
-		m_UploadCmdList->Close();
-
 		device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_UploadFence));
 
 		m_UploadFenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -41,22 +36,20 @@ namespace Graphics {
 
 	}
 
-	void TextureManager::beginTextureLoad()
+	void TextureManager::beginEarlyTextureLoad()
 	{
-		m_UploadCmdAllocator->Reset();
-		m_UploadCmdList->Reset(m_UploadCmdAllocator, nullptr);
+		auto renderer = Core::Application::getApplication()->getRenderer();
+		renderer->beginCmdList(0);
 	}
 
-	void TextureManager::endTextureLoad()
+	void TextureManager::endEarlyTextureLoad()
 	{
 		Core::Application* app = Core::Application::getApplication();
 		GraphicsContext* context = app->getGraphicsContext();
 
-		m_UploadCmdList->Close();
-
-		ID3D12CommandList* lists[] = { m_UploadCmdList };
-		context->getQueue()->ExecuteCommandLists(1, lists);
-
+		auto renderer = app->getRenderer();
+		renderer->endCmdList();
+		
 		uint32_t fenceValue = ++m_UploadFenceValue;
 		context->getQueue()->Signal(m_UploadFence, fenceValue);
 
@@ -64,11 +57,6 @@ namespace Graphics {
 			m_UploadFence->SetEventOnCompletion(fenceValue, m_UploadFenceEvent);
 			WaitForSingleObject(m_UploadFenceEvent, INFINITE);
 		}
-
-		for (auto* buffer : m_UploadBuffers)
-			buffer->Release();
-
-		m_UploadBuffers.clear();
 	}
 
 	uint32_t TextureManager::createTextureSet(std::string setName)
@@ -176,14 +164,23 @@ namespace Graphics {
 		return defaultSet;
 	}
 
+	DirectX::XMFLOAT2 TextureManager::getTextureSize(uint32_t textureID)
+	{
+		D3D12_RESOURCE_DESC desc = m_TextureResources[textureID]->GetDesc();
+
+		return DirectX::XMFLOAT2(static_cast<float>(desc.Width), static_cast<float>(desc.Height));
+	}
+
 	void TextureManager::addTextureToSet(uint32_t setID, std::string name, std::filesystem::path path)
 	{
+		auto renderer = Core::Application::getApplication()->getRenderer();
 		uint32_t textureID = 0;
 
 		if (std::filesystem::exists(path) == true) {
-			beginTextureLoad();
+			bool cmdListOpen = renderer->isCmdListOpen();
+			if(!cmdListOpen) beginEarlyTextureLoad();
 			textureID = loadTextureFromPath(path);
-			endTextureLoad();
+			if(!cmdListOpen) endEarlyTextureLoad();
 		}
 		TextureSet& set = getTextureSetByID(setID);
 
@@ -197,14 +194,16 @@ namespace Graphics {
 
 	void TextureManager::modifyTextureInSet(uint32_t setID, std::string name, std::string newName, std::filesystem::path newPath)
 	{
+		auto renderer = Core::Application::getApplication()->getRenderer();
 		TextureSet& set = getTextureSetByID(setID);
 
 		uint32_t textureID = 0;
 
 		if (std::filesystem::exists(newPath) == true) {
-			beginTextureLoad();
+			bool cmdListOpen = renderer->isCmdListOpen();
+			if (!cmdListOpen) beginEarlyTextureLoad();
 			textureID = loadTextureFromPath(newPath);
-			endTextureLoad();
+			if (!cmdListOpen) endEarlyTextureLoad();
 		}
 
 		for (auto& entry : set.textures) {
@@ -270,6 +269,7 @@ namespace Graphics {
 	uint32_t TextureManager::loadTextureFromPath(std::filesystem::path path)
 	{
 		Core::Application* app = Core::Application::getApplication();
+		auto renderer = app->getRenderer();
 		int32_t width, height;
 		int32_t channels;
 		char* data = (char*)stbi_load(path.string().c_str(), &width, &height, &channels, 4);
@@ -302,21 +302,17 @@ namespace Graphics {
 		UINT64 uploadSize = 0;
 		app->getGraphicsContext()->getDevice()->GetCopyableFootprints(&resourceDesc, 0, 1, 0, &footprint, &numRows, &rowSizeBytes, &uploadSize);
 
-		m_UploadBuffers.push_back(nullptr);
-		m_UploadBuffers.back() = app->getRenderer()->createBuffer(uploadSize, D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ);
+		BufferHandle uploadBuffer = renderer->getBufferManager().createBuffer(true, uploadSize);
 
-		char* uploadData;
-		m_UploadBuffers.back()->Map(0, nullptr, reinterpret_cast<void**>(&uploadData));
 
 		for (uint32_t row = 0; row < numRows; row++) {
-			memcpy(uploadData + footprint.Offset + row * footprint.Footprint.RowPitch, data + row * width * 4, width * 4);
+			renderer->getBufferManager().write(uploadBuffer, data + row * width * 4, footprint.Offset + row * footprint.Footprint.RowPitch, width * 4);
 		}
 
-		m_UploadBuffers.back()->Unmap(0, nullptr);
 		stbi_image_free(data);
 
 		D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
-		srcLocation.pResource = m_UploadBuffers.back();
+		srcLocation.pResource = renderer->getBufferManager().getBuffer(uploadBuffer).Get();
 		srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 		srcLocation.PlacedFootprint = footprint;
 
@@ -325,19 +321,9 @@ namespace Graphics {
 		dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 		dstLocation.SubresourceIndex = 0;
 
-		m_UploadCmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+		renderer->getCmdList()->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
 
-		D3D12_RESOURCE_BARRIER barrier{};
-		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-
-		barrier.Transition.pResource = m_TextureResources.back();
-		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-		// Die Resource Barrier an die Command List senden
-		m_UploadCmdList->ResourceBarrier(1, &barrier);
+		renderer->transition(m_TextureResources.back(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;

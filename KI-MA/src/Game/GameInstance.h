@@ -27,7 +27,7 @@ namespace Game {
 		Graphics::RenderTarget* getTarget() { return m_Target; };
 
 	private:
-		bool drawObjectProperties(GameObject& obj, bool pos);
+		bool drawObjectProperties(GameObject& obj, bool pos, bool& textureSelectorOpen);
 
 		bool m_CloseApplication = false;
 		bool m_LevelSaved = true;
@@ -37,8 +37,6 @@ namespace Game {
 
 		GameSettings m_GameSettings;
 		GameLevel m_GameLevel;
-
-		GameLevel m_SavedLevel;
 
 		bool m_SimulationMode = false;
 		bool m_Paused = false;
@@ -58,7 +56,7 @@ namespace Game {
 
 		DirectX::XMINT2 m_MouseWheelDelta = { 0, 0 };
 
-		constexpr static float m_Gravity = 9.81f * 64;
+		constexpr static float m_Gravity = 9.81f * 96;
 
 		uint32_t m_TextureSetID;
 

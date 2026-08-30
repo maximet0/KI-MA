@@ -3,6 +3,8 @@
 #include <string>
 #include <format>
 
+#define DEBUG 1
+
 namespace Core {
 
 	/// <summary>

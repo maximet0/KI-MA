@@ -18,6 +18,8 @@ struct Rectangle
 {
     float2 position;
     float2 size;
+    float2 textureScale;
+    float zLayer;
     uint textureIndex;
 };
 
@@ -34,9 +36,9 @@ VSOutput main(VSInput input)
     uint instanceID = input.instanceID + input.startinstanceLocation;
     VSOutput output;
     float2 transform = input.position * rectInfo[instanceID].size + rectInfo[instanceID].position;
-    float4 pos = float4(transform, 0.0f, 1.0f);
+    float4 pos = float4(transform, rectInfo[instanceID].zLayer, 1.0f);
     output.position = mul(viewProjectionMatrix, pos);
-    output.uv = input.uv;
+    output.uv = input.uv * rectInfo[instanceID].textureScale;
     output.textureID = rectInfo[instanceID].textureIndex;
     return output;
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <DirectXMath.h>
 #include <d3d12.h>
 #include <stdint.h>
 #include <vector>
@@ -26,8 +27,8 @@ namespace Graphics {
 		TextureManager();
 		~TextureManager();
 
-		void beginTextureLoad();
-		void endTextureLoad();
+		void beginEarlyTextureLoad();
+		void endEarlyTextureLoad();
 
 		void loadTextureSet(std::filesystem::path path);
 
@@ -41,6 +42,8 @@ namespace Graphics {
 		uint32_t getTextureIDFromSet(uint32_t setID, std::string name);
 		TextureSet& getTextureSetByID(uint32_t setID);
 
+		DirectX::XMFLOAT2 getTextureSize(uint32_t textureID);
+
 		std::vector<TextureSet>& getTextureSets() { return m_TextureSets; };
 
 		D3D12_CPU_DESCRIPTOR_HANDLE getSRVDescriptorHandle(uint32_t index);
@@ -52,9 +55,6 @@ namespace Graphics {
 
 		uint32_t loadTextureFromPath(std::filesystem::path path);
 	private:
-
-		ID3D12CommandAllocator* m_UploadCmdAllocator = nullptr;
-		ID3D12GraphicsCommandList* m_UploadCmdList = nullptr;
 		ID3D12Fence* m_UploadFence = nullptr;
 		uint32_t m_UploadFenceValue = 0;
 		HANDLE m_UploadFenceEvent = nullptr;
@@ -62,7 +62,6 @@ namespace Graphics {
 		std::vector<TextureSet> m_TextureSets;
 
 		std::vector<ID3D12Resource*> m_TextureResources;
-		std::vector<ID3D12Resource*> m_UploadBuffers;
 
 		ID3D12DescriptorHeap* m_SRVHeap = nullptr;
 		D3D12_CPU_DESCRIPTOR_HANDLE m_SRVHeapCPUStart;

@@ -1,10 +1,13 @@
 #include "GameLevel.h"
 #include <fstream>
 
+#include <random>
+
+
 namespace Game {
 	GameLevel::GameLevel()
 	{
-		memset(m_GameObjects.data(), 0, maxGameObjects * sizeof(GameObject));
+		
 	}
 
 	GameLevel::~GameLevel()
@@ -12,71 +15,119 @@ namespace Game {
 
 	}
 
-	uint16_t GameLevel::addGameObject(GameObject gameObject)
+	ObjectID GameLevel::addGameObject(GameObject gameObject)
 	{
-		uint16_t index = m_LastFreeIndex;
-		if (!m_FreeSlots.empty()) {
-			index = m_FreeSlots.back();
-			m_FreeSlots.pop_back();
-		}
-		else m_LastFreeIndex++;
-		m_GameObjects[index] = gameObject;
-		m_ObjectCount++;
-		return index;
+		static std::mt19937_64 rng(std::random_device{}());
+		static std::uniform_int_distribution<ObjectID> dist(1, UINT64_MAX);
+
+		gameObject.id = dist(rng);
+
+		m_GameObjects.push_back(gameObject);
+		return gameObject.id;
 	}
 
-	void GameLevel::removeGameObject(uint16_t index)
+	void GameLevel::removeGameObject(ObjectID id)
 	{
-		m_FreeSlots.push_back(index);
-		m_GameObjects[index].flags = GameObjectFlags::Invalid;
-		m_ObjectCount--;
+		for (auto it = m_GameObjects.begin(); it != m_GameObjects.end(); ++it) {
+			if (it->id == id) {
+				m_GameObjects.erase(it);
+				return;
+			}
+		}
 	}
+
+	char saveFileMagic[4] = { 'S', 'L', 'V', 'L' };
+	char levelMagic[4] = { '_', 'L', 'V', 'L' };
 
 	void GameLevel::loadLevel(std::filesystem::path levelPath)
 	{
+		m_GameObjects.clear();
+		m_PlayerLives = 3;
+		m_Score = 0;
+
 		if (std::filesystem::exists(levelPath)) {
 			std::ifstream file(levelPath, std::ios::in | std::ios::binary);
-			file.seekg(0, std::ios::end);
-			uint32_t fileSize = file.tellg();
-			file.seekg(0, std::ios::beg);
-			file.read(reinterpret_cast<char*>(m_GameObjects.data()), fileSize);
-			m_ObjectCount = fileSize / sizeof(GameObject);
-			m_LastFreeIndex = m_ObjectCount;
+
+			char* magic = new char[4];
+
+			bool saveFile = false;
+
+			file.read(magic, sizeof(char) * 4);
+			
+			if (strncmp(magic, saveFileMagic, 4) == 0) {
+				saveFile = true;
+				file.read((char*)&m_Score, sizeof(m_Score));
+				file.read((char*)&m_PlayerLives, sizeof(m_PlayerLives));
+			}
+			else if (strncmp(magic, levelMagic, 4) == 0) {
+				m_Score = 0;
+				m_PlayerLives = 3;
+			}
+			else {
+				return;
+			}
+
+			uint32_t objectCount = 0;
+			file.read((char*)&objectCount, sizeof(objectCount));
+
+			m_GameObjects.resize(objectCount);
+
+			for (uint32_t i = 0; i < objectCount; i++) {
+				m_GameObjects[i].loadFromFile(file, saveFile);
+			}
+			
+			delete[] magic;
+
 			file.close();
-		}
-		else {
-			m_FreeSlots.clear();
-			memset(m_GameObjects.data(), 0, maxGameObjects * sizeof(GameObject));
-			m_ObjectCount = 0;
-			m_LastFreeIndex = 0;
 		}
 	}
 
-	void GameLevel::saveLevel(std::filesystem::path levelPath)
+	void GameLevel::saveLevel(std::filesystem::path levelPath, bool saveFile)
 	{
 		std::ofstream file(levelPath, std::ios::out | std::ios::binary);
-		optimizeLevel();
 
-		// Alles wird gespeichert, somit kann die Datei auch als gespeicherter Spielstand verwendet werden.
-		file.write(reinterpret_cast<char*>(m_GameObjects.data()), m_ObjectCount * sizeof(GameObject));
+		if (saveFile) {
+			file.write(saveFileMagic, sizeof(saveFileMagic));
+			file.write((char*)&m_Score, sizeof(m_Score));
+			file.write((char*)&m_PlayerLives, sizeof(m_PlayerLives));
+		}
+		else {
+			file.write(levelMagic, sizeof(levelMagic));
+		}
+
+		uint32_t objectCount = m_GameObjects.size();
+		
+		file.write((char*)&objectCount, sizeof(objectCount));
+
+		for(auto& obj : m_GameObjects) {
+			obj.saveToFile(file, saveFile);
+		}
+
 		file.close();
 	}
 
-	void GameLevel::optimizeLevel()
+	GameObject& GameLevel::getGameObject(ObjectID id)
 	{
-		GameObject* gameObjects = new GameObject[m_LastFreeIndex];
-		uint16_t validIndex = 0;
-		for (uint16_t i = 0; i < m_LastFreeIndex; i++) {
-			if ((m_GameObjects[i].flags & GameObjectFlags::Valid) == 0) continue;
-			gameObjects[validIndex] = m_GameObjects[i];
-			validIndex++;
+		static GameObject invalidObject;
+
+		for (auto& obj : m_GameObjects) {
+			if (obj.id == id) {
+				return obj;
+			}
 		}
-		memset(m_GameObjects.data(), 0, maxGameObjects * sizeof(GameObject));
-		memcpy(m_GameObjects.data(), gameObjects, validIndex * sizeof(GameObject));
-		m_ObjectCount = validIndex;
-		m_LastFreeIndex = validIndex;
-		m_FreeSlots.clear();
-		delete[] gameObjects;
+		return invalidObject;
+	}
+
+	std::vector<uint32_t> GameLevel::getGameObjectGroupIndices(uint32_t groupID)
+	{
+		std::vector<uint32_t> indices;
+
+		for (int i = 0; i < m_GameObjects.size(); i++) {
+			if (m_GameObjects[i].triggerGroup == groupID)
+				indices.push_back(i);
+		}
+
+		return indices;
 	}
 
 }

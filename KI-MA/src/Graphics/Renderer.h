@@ -8,19 +8,22 @@
 #include "GraphicsPipeline.h"
 #include "RenderTarget.h"
 #include "TextureManager.h"
+#include "BufferManager.h"
 
 namespace Graphics {
 
-	constexpr uint32_t frameCount = 2;
+	//constexpr uint32_t frameCount = 2;
 
-	constexpr uint32_t maxRects = 1000000;
-	constexpr uint32_t maxLines = 1000000;
+	constexpr uint32_t maxRects = 100000;
+	constexpr uint32_t maxLines = 100000;
 
 
 	struct RectData
 	{
 		DirectX::XMFLOAT2 pos;
 		DirectX::XMFLOAT2 size;
+		DirectX::XMFLOAT2 textureScale;
+		float zLayer;
 		uint32_t textureID;
 	};
 
@@ -47,10 +50,7 @@ namespace Graphics {
 		void beginRenderTarget(RenderTarget* renderTarget, DirectX::XMFLOAT2 cameraPosition, float cameraZoom);
 		void endRenderTarget(RenderTarget* renderTarget);
 
-		uint32_t createTexture(const char* texturePath);
-		ID3D12Resource* createBuffer(size_t size, D3D12_HEAP_TYPE type, D3D12_RESOURCE_STATES initState);
-
-		void submitRect(DirectX::XMFLOAT2 position, DirectX::XMFLOAT2 size, uint32_t textureHandle);
+		void submitRect(DirectX::XMFLOAT2 position, float zLayer, DirectX::XMFLOAT2 size, uint32_t textureHandle, bool repeatTexture);
 		void submitLine(DirectX::XMFLOAT2 begin, DirectX::XMFLOAT2 end, uint32_t color);
 
 		void drawRects();
@@ -60,11 +60,22 @@ namespace Graphics {
 		D3D12_CPU_DESCRIPTOR_HANDLE getRTVDescriptorHandle(uint32_t index);
 		D3D12_CPU_DESCRIPTOR_HANDLE getNextRTVDescriptorHandle(uint32_t& index);
 
+
+		D3D12_CPU_DESCRIPTOR_HANDLE getDSVDescriptorHandle(uint32_t index);
+		D3D12_CPU_DESCRIPTOR_HANDLE getNextDSVDescriptorHandle(uint32_t& index);
+
+
+
 		void transition(ID3D12Resource* res, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 		ID3D12GraphicsCommandList*& getCmdList() { return m_CmdList; }
 
+		void beginCmdList(uint32_t frameIndex);
+		void endCmdList();
+
+		bool isCmdListOpen() { return cmdListOpen; }
 
 		TextureManager& getTextureManager() { return m_TextureManager; }
+		BufferManager& getBufferManager() { return m_BufferManager; }
 	private:	
 
 
@@ -72,7 +83,9 @@ namespace Graphics {
 		GraphicsPipeline m_LinePipeline;
 
 		TextureManager m_TextureManager;
+		BufferManager m_BufferManager;
 
+		bool cmdListOpen = false;
 		ID3D12GraphicsCommandList* m_CmdList;
 		ID3D12CommandAllocator* m_CmdAllocators[frameCount];
 		
@@ -85,25 +98,28 @@ namespace Graphics {
 		uint32_t m_RTVDescriptorSize = 0;
 		uint32_t m_RTVHeapCurrentIndex = 0;
 
+		ID3D12DescriptorHeap* m_DSVHeap = nullptr;
+		D3D12_CPU_DESCRIPTOR_HANDLE m_DSVHeapCPUStart;
+		uint32_t m_DSVDescriptorSize = 0;
+		uint32_t m_DSVHeapCurrentIndex = 0;
+
 		uint32_t m_CurrentRectOffset = 0;
 		uint32_t m_CurrentRectCount = 0;
 
 		uint32_t m_CurrentLineOffset = 0;
 		uint32_t m_CurrentLineCount = 0;
 
-
-
 		RenderTarget* m_CurrentRenderTarget = nullptr;
 
+		MappedWrite m_RectMappedMem;
 		uint32_t m_RectCount = 0;
-		Microsoft::WRL::ComPtr<ID3D12Resource> m_RectDataBuf = nullptr;
-		RectData* m_RectDataPtr = nullptr;
+		BufferHandle m_RectDataBuf = 0;
 
+		MappedWrite m_LineMappedMem;
 		uint32_t m_LineCount = 0;
-		Microsoft::WRL::ComPtr<ID3D12Resource> m_LineDataBuf = nullptr;
-		LineData* m_LineDataPtr = nullptr;
+		BufferHandle m_LineDataBuf = 0;
 
-		Microsoft::WRL::ComPtr<ID3D12Resource> m_CurrentVPBuf = nullptr;
+		BufferHandle m_CurrentVPBuf = 0;
 
 	};
 

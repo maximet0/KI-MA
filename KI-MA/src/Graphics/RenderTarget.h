@@ -21,7 +21,9 @@ namespace Graphics {
 
 		ID3D12Resource* getRenderTarget() { return m_RenderTarget.Get(); };
 		uint32_t getSRVDescriptorIndex() { return m_SRVDescriptorIndex; }
+
 		uint32_t getRTVDescriptorIndex() { return m_RTVDescriptorIndex; }
+		uint32_t getDSVDescriptorIndex() { return m_DSVDescriptorIndex; }
 
 	private:
 		void createRenderTarget(DirectX::XMFLOAT4 clearColor);
@@ -31,7 +33,9 @@ namespace Graphics {
 
 
 		Microsoft::WRL::ComPtr<ID3D12Resource> m_RenderTarget = nullptr;
+		Microsoft::WRL::ComPtr<ID3D12Resource> m_DepthStencil = nullptr;
 		uint32_t m_RTVDescriptorIndex = 0;
+		uint32_t m_DSVDescriptorIndex = 0;
 		uint32_t m_SRVDescriptorIndex = 0;
 	};
 }

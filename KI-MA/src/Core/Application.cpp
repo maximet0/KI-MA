@@ -20,7 +20,7 @@ namespace Core {
 	Application::Application() {
 		// Speichert die aktualle Instanz der Anwendung falls noch keine existiert.
 		if (s_Application == nullptr) s_Application = this;
-		else printf("[WARNING] Application instance already exists!\n");
+		else Logger::Fatal("Application instance already exists!\n");
 	}
 
 	Application::~Application() {
@@ -32,11 +32,15 @@ namespace Core {
 
 	DirectX::XMINT2 g_oldSize;
 
-	constexpr float TS = 1.0f / 60.0f;
-	constexpr float FS = 1.0f / 60.0f;
 
-	double g_Accumulator = 0.0;
-	double g_RenderAccumulator = 0.0;
+
+
+	void preciseSleep(double seconds) {
+		auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
+		while (std::chrono::steady_clock::now() < end) {
+			std::this_thread::yield();
+		}
+	}
 
 	void Application::onStart() {
 		//Erstellt das Fenster, den Grafik-Kontext, die Swapchain und den Renderer.
@@ -60,14 +64,18 @@ namespace Core {
 			std::filesystem::create_directory("TextureSets");
 		}
 
-		m_Renderer->getTextureManager().beginTextureLoad();
+		m_Renderer->getTextureManager().beginEarlyTextureLoad();
 		for (std::filesystem::directory_entry entry : std::filesystem::directory_iterator("TextureSets")) {
 			if (entry.is_regular_file() && entry.path().extension() == ".txst") {
 				m_Renderer->getTextureManager().loadTextureSet(entry.path());
 			}
 		}
-		m_Renderer->getTextureManager().endTextureLoad();
+		m_Renderer->getTextureManager().endEarlyTextureLoad();
 	}
+
+	constexpr float TS = 1.0f / 60.0f;
+
+	float TimeScale = 1.0f;
 
 	void Application::onUpdate() {
 		if (m_Window->getSize().x != g_oldSize.x || m_Window->getSize().y != g_oldSize.y)
@@ -77,24 +85,22 @@ namespace Core {
 		}
 
 		static auto lastTime = std::chrono::steady_clock::now();
-		auto currentTime = std::chrono::steady_clock::now().time_since_epoch().count() / 1000000000.0;
+		static auto nextTickTime = std::chrono::steady_clock::now() + std::chrono::duration<double>(TS / TimeScale);
+		auto currentTime = std::chrono::steady_clock::now();
 
+		double deltaTime = std::chrono::duration<double>(currentTime - lastTime).count();
+		lastTime = currentTime;
 
-		double deltaTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - lastTime).count();
-		lastTime = std::chrono::steady_clock::now();
+		if (currentTime >= nextTickTime) {
+			nextTickTime += std::chrono::duration<double>(TS / TimeScale);
 
-		deltaTime = (std::min)(deltaTime, 0.25);
+			if(nextTickTime < currentTime)
+				nextTickTime = currentTime + std::chrono::duration<double>(TS / TimeScale);
 
-		g_Accumulator += deltaTime;
-		g_RenderAccumulator += deltaTime;
-
-		while (g_Accumulator >= TS) {
-			g_Accumulator -= TS;
+			auto start = std::chrono::high_resolution_clock::now();
 			m_GameInstance->update(TS);
-		}
-
-		while (g_RenderAccumulator >= FS) {
-			g_RenderAccumulator -= FS;
+			auto timeInMS = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count();
+			//Core::Logger::Debug("Update Time: {} ms", timeInMS);
 
 			ImGui_ImplDX12_NewFrame();
 			ImGui_ImplWin32_NewFrame();
@@ -102,8 +108,6 @@ namespace Core {
 
 			m_Renderer->beginFrame();
 			m_GameInstance->render();
-
-			//ImGui::ShowDemoWindow();
 
 			m_GameInstance->drawGUI();
 			m_Renderer->endFrame();
@@ -113,10 +117,12 @@ namespace Core {
 		g_oldSize = m_Window->getSize();
 		m_Window->pollEvents();
 		m_EventSystem->pollEvents();
+		
+		Core::Logger::Debug("FPS: {:.2f} | UPS: {:.2f}", ImGui::GetIO().Framerate, 1.0 / deltaTime);
 
-		double sleepTime = (std::min)(TS - g_Accumulator, FS - g_RenderAccumulator);
+		double sleepTime = std::chrono::duration<double>(nextTickTime - currentTime).count();
 		if (sleepTime > 0.0) {
-			std::this_thread::sleep_for(std::chrono::duration<double>(sleepTime));
+			preciseSleep(sleepTime);
 		}
 	}
 
