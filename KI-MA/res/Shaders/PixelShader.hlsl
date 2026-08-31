@@ -16,10 +16,10 @@ struct PSInput
 
 StructuredBuffer<Rectangle> rectInfo : register(t0);
 
+Texture2D textures[2048] : register(t1);
 SamplerState linearSampler : register(s0);
 
 float4 main(PSInput input) : SV_TARGET
 {
-    Texture2D<float4> texture = ResourceDescriptorHeap[input.textureID];
-    return texture.Sample(linearSampler, input.uv);
+    return textures[input.textureID].Sample(linearSampler, input.uv);
 }

@@ -80,7 +80,7 @@
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
     <FxCompile>
-      <ShaderModel>6.8</ShaderModel>
+      <ShaderModel>6.5</ShaderModel>
     </FxCompile>
     <PostBuildEvent>
       <Command>xcopy "$(ProjectDir)res/Textures" "$(TargetDir)Textures" /E /I /Y</Command>
@@ -114,7 +114,7 @@
       <EnableSegmentHeap>true</EnableSegmentHeap>
     </Manifest>
     <FxCompile>
-      <ShaderModel>6.8</ShaderModel>
+      <ShaderModel>6.5</ShaderModel>
     </FxCompile>
     <PostBuildEvent>
       <Command>xcopy "$(ProjectDir)res/Textures" "$(TargetDir)Textures" /E /I /Y</Command>
@@ -186,22 +186,16 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="res\Shaders\LineVertexShader.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">6.8</ShaderModel>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
     </FxCompile>
     <FxCompile Include="res\Shaders\PixelShader.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">6.8</ShaderModel>
     </FxCompile>
     <FxCompile Include="res\Shaders\VertexShader.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">6.8</ShaderModel>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>

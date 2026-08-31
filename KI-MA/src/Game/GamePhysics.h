@@ -25,7 +25,7 @@ namespace Game {
 		static void updatePhysics(GameLevel& level, float deltaTime, float gravity);
 	private:
 		
-		static void resolveAxis(GameLevel& level, GameObject& a, float deltaTime, bool isYAxis, bool& noneCollided, bool& noneCollidedWithGround);
+		static void resolveAxis(GameLevel& level, GameObject& a, float deltaTime, bool isYAxis, bool& noneCollided, bool& noneCollidedWithGround, bool& hitPositive, bool& hitNegative);
 		//static bool checkCollision(const GameCollider& a, const GameObject& aObj, const GameCollider& b, const GameObject& bObj);
 
 		/// <summary>

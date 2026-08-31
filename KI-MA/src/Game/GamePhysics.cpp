@@ -57,7 +57,7 @@ namespace Game {
 		return RaycastHit();
 	}
 
-	void GamePhysics::resolveAxis(GameLevel& level, GameObject& a, float deltaTime, bool isYAxis, bool& noneCollided, bool& noneCollidedWithGround) {
+	void GamePhysics::resolveAxis(GameLevel& level, GameObject& a, float deltaTime, bool isYAxis, bool& noneCollided, bool& noneCollidedWithGround, bool& hitPositive, bool& hitNegative) {
 
 		for (auto& b : level.getGameObjects()) {
 			if (&b == &a) continue;
@@ -68,8 +68,8 @@ namespace Game {
 			if (res.collided && b.flags & GameObjectFlags::Static && b.flags & GameObjectFlags::Trigger) {
 				for (auto& trig : b.triggers) {
 					if (trig->type == TriggerType::None) continue;
-					if (trig->activationState != TriggerActivationState::Finished) trig->insideTrigger = true;
-
+					trig->insideTrigger = true;
+					//if (trig->activationState != TriggerActivationState::Finished) 
 				}
 				continue;
 			}
@@ -80,6 +80,9 @@ namespace Game {
 
 			if (otherOverlap != 0.0f && std::abs(otherOverlap) < std::abs(overlap)) continue;
 
+			if (overlap > 0.0f) hitPositive = true;
+			else hitNegative = true;
+
 			noneCollided = false;
 			a.triggerGroup = b.triggerGroup;
 
@@ -88,11 +91,11 @@ namespace Game {
 			float aGroupVel = isYAxis ? a.physics.groupVelocity.y : a.physics.groupVelocity.x;
 			float bGroupVel = isYAxis ? b.physics.groupVelocity.y : b.physics.groupVelocity.x;
 
-			if (isYAxis) {
+			/*if (isYAxis) {
 				float relativeVelocityY = (aVel + aGroupVel) - bGroupVel;
 				if ((relativeVelocityY > 0.0f && overlap > 0.0f) || (relativeVelocityY < 0.0f && overlap < 0.0f))
 					continue;
-			}
+			}*/
 
 			if(b.triggerGroup != 0) noneCollidedWithGround = false;
 
@@ -167,13 +170,32 @@ namespace Game {
 
 				bool noneCollided = true;
 				bool noneCollidedWithGround = true;
-				resolveAxis(level, a, subDeltaTime, false, noneCollided, noneCollidedWithGround);
+				bool hitPositive = false;
+				bool hitNegative = false;
+
+				bool crushed = false;
+
+				resolveAxis(level, a, subDeltaTime, false, noneCollided, noneCollidedWithGround, hitPositive, hitNegative);
+
+				if (hitNegative && hitPositive) crushed = true;
+				hitNegative = false;
+				hitPositive = false;
 
 				a.position.y += (a.physics.velocity.y + a.physics.groupVelocity.y) * subDeltaTime;
-				resolveAxis(level, a, subDeltaTime, true, noneCollided, noneCollidedWithGround);
+				resolveAxis(level, a, subDeltaTime, true, noneCollided, noneCollidedWithGround, hitPositive, hitNegative);
+
+				if (hitNegative && hitPositive) crushed = true;
 
 				if (noneCollided) {
 					a.triggerGroup = 0;
+				}
+
+				if (crushed) {
+					a.position.x = -9999;
+					a.position.y = -9999;
+					if (a.flags & GameObjectFlags::Player) {
+						level.setPlayerLives(0);
+					}
 				}
 
 				float dampFactor = exp(-(noneCollidedWithGround ? airDamping : groundDamping) * subDeltaTime);

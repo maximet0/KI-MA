@@ -19,19 +19,21 @@ namespace Game{
 						}
 						break;
 					case TriggerCondition::OnStay:
-						if (trig->insideTrigger) trig->activationState = TriggerActivationState::Active;
-						else trig->activationState = TriggerActivationState::Finished;
+						if (trig->insideTrigger && trig->activationState != TriggerActivationState::Finished) trig->activationState = TriggerActivationState::Active;
+						else if (trig->wasInsideTrigger) trig->activationState = TriggerActivationState::Finished;
 						break;
 					case TriggerCondition::OnExit:
 						if (!trig->insideTrigger && trig->wasInsideTrigger && trig->activationState == TriggerActivationState::Inactive) {
 							trig->activationState = TriggerActivationState::Active;
 						}
+						if (trig->insideTrigger && trig->wasInsideTrigger && trig->activationState == TriggerActivationState::Active)
+							trig->activationState = TriggerActivationState::Finished;
 						break;
 					}
 
 
 					// Trigger Activated
-					if (trig->activationState == TriggerActivationState::Active) {
+					if (trig->activationState == TriggerActivationState::Active || trig->activationState == TriggerActivationState::Finished) {
 						switch (trig->type) {
 						case TriggerType::CameraTrigger: {
 							updateCameraTrigger(instance, static_cast<CameraTrigger*>(trig.get()), deltaTime);
@@ -56,10 +58,11 @@ namespace Game{
 						}
 
 					}
-					else if (trig->activationState == TriggerActivationState::Finished) {
-						if(!trig->singleUse) trig->activationState = TriggerActivationState::Inactive;
-					}
 
+					if (trig->activationState == TriggerActivationState::Finished) {
+						if(!trig->singleUse && !(trig->condition == TriggerCondition::OnStay && trig->wasInsideTrigger)) 
+							trig->activationState = TriggerActivationState::Inactive;
+					}
 
 					if (trig->insideTrigger) trig->wasInsideTrigger = true;
 					else trig->wasInsideTrigger = false;
@@ -72,6 +75,8 @@ namespace Game{
 
 	void GameTriggers::updateFinishTrigger(GameInstance& instance, FinishTrigger* trig, float deltaTime)
 	{
+		if (trig->activationState == TriggerActivationState::Finished) return;
+
 		if (instance.m_GameLevel.getScore() >= trig->minimumScore) {
 			if (trig->nextLevelPath == "") {
 				Core::Logger::Fatal("Implement Game Win");
@@ -88,8 +93,14 @@ namespace Game{
 
 	void GameTriggers::updateCameraTrigger(GameInstance& instance, CameraTrigger* trig, float deltaTime)
 	{
-		if (trig->triggerProgress <= 0.0f || (!trig->wasInsideTrigger && trig->insideTrigger)) {
+		Core::Logger::Debug("Progress: {}", trig->triggerProgress);
+
+		if (trig->activationState == TriggerActivationState::Finished) {
 			trig->triggerProgress = 0.0f;
+			return;
+		}
+
+		if (trig->triggerProgress <= 0.0f || (!trig->wasInsideTrigger && trig->insideTrigger)) {
 			trig->startPosition = instance.m_CameraPosition;
 			trig->startZoom = instance.m_CameraZoom;
 			trig->startFollowPlayer = instance.m_CameraFollowPlayer;
@@ -121,6 +132,12 @@ namespace Game{
 
 	void GameTriggers::updateObjectMoveTrigger(GameInstance& instance, ObjectMoveTrigger* trig, float deltaTime)
 	{
+		if (trig->activationState == TriggerActivationState::Finished) {
+			trig->currentPoint = 0;
+			trig->pointProgress = 0.0f;
+			return;
+		}
+
 
 		auto objectIndices = instance.m_GameLevel.getGameObjectGroupIndices(trig->targetGroupID);
 		if (objectIndices.size() == 0) {
@@ -168,7 +185,7 @@ namespace Game{
 				bool xDirChanged = (targetObject.physics.groupVelocity.x > 0.0f && velocity.x < 0.0f) || (targetObject.physics.groupVelocity.x < 0.0f && velocity.x > 0.0f);
 				bool yDirChanged = (targetObject.physics.groupVelocity.y > 0.0f && velocity.y < 0.0f) || (targetObject.physics.groupVelocity.y < 0.0f && velocity.y > 0.0f);
 
-				if(!xDirChanged && !yDirChanged) {
+				if((!xDirChanged && !yDirChanged) || (targetObject.flags & GameObjectFlags::Static)) {
 					targetObject.physics.groupVelocity.x = velocity.x;
 					targetObject.physics.groupVelocity.y = velocity.y;
 				}
@@ -181,7 +198,11 @@ namespace Game{
 				trig->currentPoint++;
 				if (trig->currentPoint >= trig->pathPoints.size()) {
 					if (trig->loop) trig->currentPoint = 0;
-					else trig->activationState = TriggerActivationState::Finished;
+					else {
+						trig->activationState = TriggerActivationState::Finished;
+						trig->currentPoint = 0;
+						trig->pointProgress = 0.0f;
+					}
 				}
 			}
 		}
@@ -189,12 +210,16 @@ namespace Game{
 
 	void GameTriggers::updateScoreTrigger(GameInstance& instance, ScoreTrigger* trig, float deltaTime)
 	{
+		if (trig->activationState == TriggerActivationState::Finished) return;
+
 		instance.m_GameLevel.setScore(instance.m_GameLevel.getScore() + trig->scoreAmount);
 		trig->activationState = TriggerActivationState::Finished;
 	}
 
 	void GameTriggers::updateDamageTrigger(GameInstance& instance, DamageTrigger* trig, float deltaTime)
 	{
+		if (trig->activationState == TriggerActivationState::Finished) return;
+
 		instance.m_GameLevel.setPlayerLives(instance.m_GameLevel.getPlayerLives() + trig->damageAmount);
 		trig->activationState = TriggerActivationState::Finished;
 	}

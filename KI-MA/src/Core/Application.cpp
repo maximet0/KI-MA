@@ -56,7 +56,7 @@ namespace Core {
 
 		Game::GameSettings settings;
 		settings.levelEditorMode = true;
-		settings.levelPath = "testLevel.lvl";
+		settings.levelPath = "../../testLevel.lvl";
 
 		m_GameInstance = new Game::GameInstance(settings);
 
@@ -100,7 +100,6 @@ namespace Core {
 			auto start = std::chrono::high_resolution_clock::now();
 			m_GameInstance->update(TS);
 			auto timeInMS = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count();
-			//Core::Logger::Debug("Update Time: {} ms", timeInMS);
 
 			ImGui_ImplDX12_NewFrame();
 			ImGui_ImplWin32_NewFrame();
@@ -118,8 +117,6 @@ namespace Core {
 		m_Window->pollEvents();
 		m_EventSystem->pollEvents();
 		
-		Core::Logger::Debug("FPS: {:.2f} | UPS: {:.2f}", ImGui::GetIO().Framerate, 1.0 / deltaTime);
-
 		double sleepTime = std::chrono::duration<double>(nextTickTime - currentTime).count();
 		if (sleepTime > 0.0) {
 			preciseSleep(sleepTime);

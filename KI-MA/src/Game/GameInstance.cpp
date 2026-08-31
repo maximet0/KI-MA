@@ -76,11 +76,12 @@ namespace Game {
 		}
 		m_LastGameSettings = m_GameSettings;
 		m_GameSettings = settings;
+		m_CameraFollowPlayer = true;
 	}
 
 	float maxSpeed = 300.0f;
 	float acceleration = 2500.0f;
-	float jumpForce = 450.0f;
+	float jumpForce = 420.0f;
 
 	float gracePeriod = 0.1f;
 
@@ -88,7 +89,7 @@ namespace Game {
 	{
 		if ((m_SimulationMode && !m_Paused) || !m_GameSettings.levelEditorMode) {
 			static ObjectID playerID = 0;
-			if (playerID == 0) {
+			if (!(m_GameLevel.getGameObject(playerID).flags & GameObjectFlags::Player)) {
 				for (auto& obj : m_GameLevel.getGameObjects()) {
 					if (obj.flags & GameObjectFlags::Player) {
 						playerID = obj.id;
@@ -101,6 +102,12 @@ namespace Game {
 
 			if (playerID != 0) {
 				GameObject& player = m_GameLevel.getGameObject(playerID);
+
+				if (m_GameLevel.getPlayerLives() == 0) {
+					m_Paused = true;
+					return;
+				}
+				
 				player.physics.acceleration.x = 0.0f;
 
 				if (grounded) acceleration = 2500.0f;
@@ -126,6 +133,9 @@ namespace Game {
 
 			}
 
+
+			GameTriggers::updateTriggers(*this, deltaTime);
+
 			GamePhysics::updatePhysics(m_GameLevel, deltaTime, m_Gravity);
 
 
@@ -143,8 +153,7 @@ namespace Game {
 				}
 
 			}
-			
-			GameTriggers::updateTriggers(*this, deltaTime);
+
 		}
 	}
 
@@ -511,6 +520,8 @@ namespace Game {
 
 		if (m_GameSettings.levelEditorMode) {
 
+			if (!m_SimulationMode) m_CameraFollowPlayer = false;
+
 			bool saveSettings = false;
 			ImGui::Begin("Level Editor");
 
@@ -619,7 +630,8 @@ namespace Game {
 			ObjectID clickedID = 0;
 			if (gameViewLeftMouseDown || gameViewRightMouseDown) {
 
-				for (auto& obj : m_GameLevel.getGameObjects()) {
+				for (auto it = m_GameLevel.getGameObjects().end(); it != m_GameLevel.getGameObjects().begin(); it--) {
+					GameObject& obj = *(it - 1);
 					if (worldPos.x >= obj.position.x && worldPos.x <= obj.position.x + obj.size.x &&
 						worldPos.y >= obj.position.y && worldPos.y <= obj.position.y + obj.size.y) {
 						if (gameViewLeftMouseDown) selectedID = obj.id;
@@ -662,13 +674,18 @@ namespace Game {
 					m_GameLevel.addGameObject(m_DrawObject);
 					m_LevelSaved = false;
 				}
-				if (gameViewRightMouseDown && clickedID != 0) {
+				if (gameViewRightMouseDown && clickedID != 0 && !cameraDrag) {
 					m_GameLevel.removeGameObject(clickedID);
 					selectedID = 0;
 					m_LevelSaved = false;
 				}
 			}
 
+
+			ImGui::Text("Debug Info:");
+			ImGui::Text("	Score: %d", m_GameLevel.getScore());
+			ImGui::Text("	Player Lives: %d", m_GameLevel.getPlayerLives());
+			ImGui::Text("	Camera Position: (%.2f, %.2f)", m_CameraPosition.x, m_CameraPosition.y);
 			ImGui::End();
 
 

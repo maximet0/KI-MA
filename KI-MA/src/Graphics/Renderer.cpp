@@ -60,6 +60,25 @@ namespace Graphics {
 		rootParam.Descriptor.RegisterSpace = 0;
 		rootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 		m_DefaultPipeline.addRootParameter(rootParam);
+		rootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+		rootParam.Constants.ShaderRegister = 1;
+		rootParam.Constants.RegisterSpace = 0;
+		rootParam.Constants.Num32BitValues = 1;
+		rootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		m_DefaultPipeline.addRootParameter(rootParam);
+
+		D3D12_DESCRIPTOR_RANGE descriptorRange = {};
+		descriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		descriptorRange.NumDescriptors = 2048;
+		descriptorRange.BaseShaderRegister = 1;
+		descriptorRange.RegisterSpace = 0;
+		descriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		rootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParam.DescriptorTable.NumDescriptorRanges = 1;
+		rootParam.DescriptorTable.pDescriptorRanges = &descriptorRange;
+		rootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		m_DefaultPipeline.addRootParameter(rootParam);
 
 		D3D12_STATIC_SAMPLER_DESC samplerDesc = {};
 		samplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
@@ -231,6 +250,10 @@ namespace Graphics {
 		m_CmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		m_CmdList->IASetVertexBuffers(0, 1, &vertexBufferView);
 		m_CmdList->IASetIndexBuffer(&indexBufferView);
+
+		m_CmdList->SetGraphicsRootDescriptorTable(3, m_TextureManager.getSRVGPUDescriptorHandle(0));
+		m_CmdList->SetGraphicsRoot32BitConstant(2, m_CurrentRectOffset, 0);
+
 		m_CmdList->DrawIndexedInstanced(6, m_CurrentRectCount, 0, 0, m_CurrentRectOffset);
 
 		m_CurrentRectOffset = m_RectCount;

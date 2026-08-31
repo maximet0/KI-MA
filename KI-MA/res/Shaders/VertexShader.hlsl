@@ -4,7 +4,6 @@ struct VSInput
     float2 position : POSITION;
     float2 uv : TEXCOORD0;
     uint instanceID : SV_InstanceID;
-    uint startinstanceLocation : SV_StartInstanceLocation;
 };
 
 struct VSOutput
@@ -28,12 +27,17 @@ cbuffer CameraBuffer : register(b0)
     float4x4 viewProjectionMatrix;
 };
 
+cbuffer StartInstance : register(b1)
+{
+    uint startInstance;
+};
+
 StructuredBuffer<Rectangle> rectInfo : register(t0);
 
 
 VSOutput main(VSInput input)
 {
-    uint instanceID = input.instanceID + input.startinstanceLocation;
+    uint instanceID = input.instanceID + startInstance;
     VSOutput output;
     float2 transform = input.position * rectInfo[instanceID].size + rectInfo[instanceID].position;
     float4 pos = float4(transform, rectInfo[instanceID].zLayer, 1.0f);
