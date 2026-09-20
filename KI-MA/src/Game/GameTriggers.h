@@ -44,18 +44,25 @@ namespace Game {
 		void loadFromFile(std::ifstream& file, TriggerType type, bool saveFile);
 	};
 
+	enum FollowPlayerAxis : uint8_t {
+		FollowPlayerNone = 0,
+		FollowPlayerX = 1 << 0,
+		FollowPlayerY = 1 << 1,
+		FollowPlayerBoth = FollowPlayerX | FollowPlayerY
+	};
+
 	struct CameraTrigger : TriggerBase {
 		CameraTrigger() {
 			type = TriggerType::CameraTrigger;
 		}
 
-		bool followPlayer = false;
+		FollowPlayerAxis followPlayer = FollowPlayerAxis::FollowPlayerNone;
 		float targetZoom = 1.0f;
 		DirectX::XMFLOAT2 targetPosition = { 0, 0 };
 		float transitionTime = 1.0f;
 
 		float triggerProgress = 0.0f;
-		bool startFollowPlayer = false;
+		FollowPlayerAxis startFollowPlayer = FollowPlayerAxis::FollowPlayerNone;
 		float startZoom = 0.0f;
 		DirectX::XMFLOAT2 startPosition = { 0, 0 };
 

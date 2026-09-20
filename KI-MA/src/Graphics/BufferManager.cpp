@@ -5,7 +5,8 @@
 
 namespace Graphics {
 
-	BufferManager::BufferManager()
+	BufferManager::BufferManager(Renderer* renderer)
+		: m_Renderer(renderer)
 	{
 
 		auto& device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
@@ -87,6 +88,7 @@ namespace Graphics {
 		resourceDesc.MipLevels = 1;
 		resourceDesc.SampleDesc = { 1, 0 };
 		resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+		
 
 		auto allocInfo = device->GetResourceAllocationInfo(0, 1, &resourceDesc);
 
@@ -227,20 +229,21 @@ namespace Graphics {
 
 	}
 
-	MappedWrite BufferManager::beginMappedWrite(BufferHandle handle, uint32_t size)
+	MappedBuf BufferManager::beginMappedWrite(BufferHandle handle, uint32_t size)
 	{
-		MappedWrite write;
+		MappedBuf write;
 
-		auto renderer = Core::Application::getApplication()->getRenderer();
 		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
-		uint32_t frameIndex = Core::Application::getApplication()->getSwapchain()->getBackBufferIndex();
+		uint32_t frameIndex = 0;
+		if(Core::Application::getApplication()->getSwapchain() != nullptr) 
+			frameIndex = Core::Application::getApplication()->getSwapchain()->getBackBufferIndex();
 
 		auto& buffers = handle & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
 		BufferHandle rawHandle = handle & TRANSIENT_HANDLE_MASK ? handle & ~TRANSIENT_HANDLE_MASK : handle;
 
 		if (rawHandle == 0 || rawHandle > buffers.size()) {
 			Core::Logger::Error("BufferHandle invalid: {}", rawHandle);
-			return MappedWrite();
+			return MappedBuf();
 		}
 
 		write.handle = handle;
@@ -280,11 +283,105 @@ namespace Graphics {
 		return write;
 	}
 
-	void BufferManager::submitMappedWrite(MappedWrite write, uint32_t bufOffset, uint32_t size)
+	MappedBuf BufferManager::beginMappedRead(BufferHandle handle, uint32_t size)
 	{
-		auto renderer = Core::Application::getApplication()->getRenderer();
+		MappedBuf read;
+
+
 		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
-		uint32_t frameIndex = Core::Application::getApplication()->getSwapchain()->getBackBufferIndex();
+		uint32_t frameIndex = 0;
+		if (Core::Application::getApplication()->getSwapchain() != nullptr)
+			frameIndex = Core::Application::getApplication()->getSwapchain()->getBackBufferIndex();
+
+		auto& buffers = handle & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
+		BufferHandle rawHandle = handle & TRANSIENT_HANDLE_MASK ? handle & ~TRANSIENT_HANDLE_MASK : handle;
+
+		if (rawHandle == 0 || rawHandle > buffers.size()) {
+			Core::Logger::Error("BufferHandle invalid: {}", rawHandle);
+			return MappedBuf();
+		}
+
+		read.handle = handle;
+		read.size = size;
+
+		if ((m_ReadbackBuf.curOffset[frameIndex] - m_ReadbackBuf.size * frameIndex) + size > m_ReadbackBuf.size) {
+			Core::Logger::Warn("Slower Buffer Read: needed {} bytes, {} bytes available.", size, m_ReadbackBuf.size - (m_ReadbackBuf.curOffset[frameIndex] - m_ReadbackBuf.size * frameIndex));
+			D3D12_RESOURCE_DESC resourceDesc = {};
+			resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+			resourceDesc.Width = (m_ReadbackBuf.size + size) * frameCount;
+			resourceDesc.Height = 1;
+			resourceDesc.DepthOrArraySize = 1;
+			resourceDesc.MipLevels = 1;
+			resourceDesc.SampleDesc = { 1, 0 };
+			resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+			D3D12_HEAP_PROPERTIES heapDesc = {};
+			heapDesc.Type = D3D12_HEAP_TYPE_READBACK;
+			m_ReadbackBuf.frameIndex = frameIndex;
+			m_ReadbackBuf.buffer->Unmap(0, nullptr);
+			m_OldCopyBuffers.push_back(m_ReadbackBuf);
+			device->CreateCommittedResource(
+				&heapDesc, D3D12_HEAP_FLAG_NONE,
+				&resourceDesc,
+				D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+				IID_PPV_ARGS(&m_ReadbackBuf.buffer)
+			);
+			m_ReadbackBuf.size = m_ReadbackBuf.size + size;
+			m_ReadbackBuf.buffer->Map(0, nullptr, reinterpret_cast<void**>(&m_ReadbackBuf.mappedData));
+		}
+
+		read.mappedMemory = m_ReadbackBuf.mappedData + m_ReadbackBuf.curOffset[frameIndex];
+		read.offset = m_ReadbackBuf.curOffset[frameIndex];
+		m_ReadbackBuf.curOffset[frameIndex] += size;
+
+		return read;
+	}
+
+	void BufferManager::submitMappedRead(MappedBuf& read, uint32_t offset, uint32_t size)
+	{
+		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
+		uint32_t frameIndex = 0;
+		if (Core::Application::getApplication()->getSwapchain() != nullptr)
+			frameIndex = Core::Application::getApplication()->getSwapchain()->getBackBufferIndex();
+
+		auto& buffers = read.handle & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
+		BufferHandle rawHandle = read.handle & TRANSIENT_HANDLE_MASK ? read.handle & ~TRANSIENT_HANDLE_MASK : read.handle;
+
+
+		if (read.size < offset + size) {
+			Core::Logger::Error("Buffer too small: {} bytes needed, {} bytes available.", size, read.size);
+			return;
+		}
+
+		D3D12_RESOURCE_STATES oldState = buffers[rawHandle - 1].state;
+		transitionState(read.handle, D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+		m_Renderer->getCmdList()->CopyBufferRegion(
+			m_ReadbackBuf.buffer.Get(), read.offset,
+			buffers[rawHandle - 1].buffer.Get(), offset,
+			size
+		);
+		
+		read.offset += size;
+
+		transitionState(read.handle, oldState);
+
+	}
+
+	void BufferManager::executeReads()
+	{
+		m_Renderer->endCmdList();
+		m_Renderer->waitForGPU();
+		m_Renderer->beginCmdList(Core::Application::getApplication()->getSwapchain()->getBackBufferIndex());
+
+		m_Renderer->getCmdList()->SetDescriptorHeaps(1, &m_Renderer->getTextureManager().getSRVDescriptorHeap());
+	}
+
+	void BufferManager::submitMappedWrite(MappedBuf& write, uint32_t bufOffset, uint32_t size)
+	{
+		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
+		uint32_t frameIndex = 0;
+		if(Core::Application::getApplication()->getSwapchain() != nullptr)
+			frameIndex = Core::Application::getApplication()->getSwapchain()->getBackBufferIndex();
 
 		auto& buffers = write.handle & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
 		BufferHandle rawHandle = write.handle & TRANSIENT_HANDLE_MASK ? write.handle & ~TRANSIENT_HANDLE_MASK : write.handle;
@@ -297,7 +394,7 @@ namespace Graphics {
 			return;
 		}
 
-		renderer->getCmdList()->CopyBufferRegion(
+		m_Renderer->getCmdList()->CopyBufferRegion(
 			buffers[rawHandle - 1].buffer.Get(), bufOffset,
 			m_UploadBuf.buffer.Get(), write.offset,
 			size
@@ -308,7 +405,6 @@ namespace Graphics {
 
 	void BufferManager::write(BufferHandle handle, void* src, uint32_t bufOffset, uint32_t size)
 	{
-		auto renderer = Core::Application::getApplication()->getRenderer();
 		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
 		uint32_t frameIndex = Core::Application::getApplication()->getSwapchain()->getBackBufferIndex();
 
@@ -362,7 +458,7 @@ namespace Graphics {
 		D3D12_RESOURCE_STATES oldState = buffers[rawHandle - 1].state;
 		transitionState(handle, D3D12_RESOURCE_STATE_COPY_DEST);
 
-		renderer->getCmdList()->CopyBufferRegion(
+		m_Renderer->getCmdList()->CopyBufferRegion(
 			buffers[rawHandle-1].buffer.Get(), bufOffset,
 			m_UploadBuf.buffer.Get(), offset,
 			size
@@ -373,8 +469,6 @@ namespace Graphics {
 
 	void BufferManager::copy(BufferHandle srcBuffer, BufferHandle dstBuffer)
 	{
-		auto renderer = Core::Application::getApplication()->getRenderer();
-
 		auto& srcBuffers = srcBuffer & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
 		auto& dstBuffers = dstBuffer & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
 
@@ -392,7 +486,7 @@ namespace Graphics {
 		transitionState(srcBuffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		transitionState(dstBuffer, D3D12_RESOURCE_STATE_COPY_DEST);
 
-		renderer->getCmdList()->CopyBufferRegion(
+		m_Renderer->getCmdList()->CopyBufferRegion(
 			dstBuffers[rawDstHandle - 1].buffer.Get(), 0,
 			srcBuffers[rawSrcHandle - 1].buffer.Get(), 0,
 			srcBuffers[rawSrcHandle - 1].size
@@ -402,14 +496,9 @@ namespace Graphics {
 		transitionState(dstBuffer, dstOldState);
 	}
 
-	void BufferManager::read(BufferHandle handle, void* dst, uint32_t bufOffset, uint32_t size)
-	{
-		//TODO
-	}
-
 	void BufferManager::transitionState(BufferHandle handle, D3D12_RESOURCE_STATES after)
 	{	
-		auto renderer = Core::Application::getApplication()->getRenderer();
+
 
 		auto& buffers = handle & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
 		BufferHandle rawHandle = handle & TRANSIENT_HANDLE_MASK ? handle & ~TRANSIENT_HANDLE_MASK : handle;
@@ -437,7 +526,7 @@ namespace Graphics {
 
 		bufferInfo.state = after;
 		// Die Resource Barrier an die Command List senden
-		renderer->getCmdList()->ResourceBarrier(1, &barrier);
+		m_Renderer->getCmdList()->ResourceBarrier(1, &barrier);
 	}
 
 	Microsoft::WRL::ComPtr<ID3D12Resource>& BufferManager::getBuffer(BufferHandle handle)

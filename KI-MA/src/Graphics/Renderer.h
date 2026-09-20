@@ -7,8 +7,9 @@
 
 #include "GraphicsPipeline.h"
 #include "RenderTarget.h"
-#include "TextureManager.h"
 #include "BufferManager.h"
+#include "TextureManager.h"
+
 
 namespace Graphics {
 
@@ -74,16 +75,16 @@ namespace Graphics {
 
 		bool isCmdListOpen() { return cmdListOpen; }
 
-		TextureManager& getTextureManager() { return m_TextureManager; }
-		BufferManager& getBufferManager() { return m_BufferManager; }
+		BufferManager& getBufferManager() { return *m_BufferManager; }
+		TextureManager& getTextureManager() { return *m_TextureManager; }
 	private:	
 
 
 		GraphicsPipeline m_DefaultPipeline;
 		GraphicsPipeline m_LinePipeline;
 
-		TextureManager m_TextureManager;
-		BufferManager m_BufferManager;
+		BufferManager* m_BufferManager;
+		TextureManager* m_TextureManager;
 
 		bool cmdListOpen = false;
 		ID3D12GraphicsCommandList* m_CmdList;
@@ -111,11 +112,11 @@ namespace Graphics {
 
 		RenderTarget* m_CurrentRenderTarget = nullptr;
 
-		MappedWrite m_RectMappedMem;
+		MappedBuf m_RectMappedMem;
 		uint32_t m_RectCount = 0;
 		BufferHandle m_RectDataBuf = 0;
 
-		MappedWrite m_LineMappedMem;
+		MappedBuf m_LineMappedMem;
 		uint32_t m_LineCount = 0;
 		BufferHandle m_LineDataBuf = 0;
 

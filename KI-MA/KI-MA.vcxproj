@@ -124,6 +124,7 @@
     <ClCompile Include="src\Core\Application.cpp" />
     <ClCompile Include="src\Core\Logger.cpp" />
     <ClCompile Include="src\Events\EventSystem.cpp" />
+    <ClCompile Include="src\Game\GameEditor.cpp" />
     <ClCompile Include="src\Game\GameInstance.cpp" />
     <ClCompile Include="src\Game\GameLevel.cpp" />
     <ClCompile Include="src\Game\GameObject.cpp" />

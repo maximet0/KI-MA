@@ -57,6 +57,55 @@ namespace Graphics {
 		device->CreateShaderResourceView(m_RenderTarget.Get(), &srvDesc, renderer->getTextureManager().getSRVDescriptorHandle(m_SRVDescriptorIndex));
 	}
 
+	void RenderTarget::copyToCpuBuffer(void* buffer, size_t bufferSize)
+	{
+		auto renderer = Core::Application::getApplication()->getRenderer();
+		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
+
+		const D3D12_RESOURCE_DESC desc = m_RenderTarget->GetDesc();
+		uint32_t width = static_cast<uint32_t>(desc.Width);
+		uint32_t height = desc.Height;
+
+		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+		UINT numRows = 0;
+		UINT64 rowSizeBytes = 0;
+		UINT64 uploadSize = 0;
+		device->GetCopyableFootprints(&desc, 0, 1, 0, &footprint, &numRows, &rowSizeBytes, &uploadSize);
+
+		auto bufManager = &renderer->getBufferManager();
+
+		BufferHandle readback = bufManager->createBuffer(true, uploadSize);
+	
+
+		D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
+		srcLocation.pResource = m_RenderTarget.Get();
+		srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+		srcLocation.SubresourceIndex = 0;
+
+		D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
+		dstLocation.pResource = bufManager->getBuffer(readback).Get();
+		dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+		dstLocation.PlacedFootprint = footprint;
+
+		renderer->transition(m_RenderTarget.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		renderer->transition(bufManager->getBuffer(readback).Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
+
+		renderer->getCmdList()->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+
+		renderer->transition(m_RenderTarget.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		renderer->transition(bufManager->getBuffer(readback).Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+
+
+		MappedBuf mappedRead = bufManager->beginMappedRead(readback, bufferSize);
+
+		for (uint32_t row = 0; row < numRows; row++) {
+			bufManager->submitMappedRead(mappedRead, footprint.Offset + row * footprint.Footprint.RowPitch, width * 4);
+		}
+
+		bufManager->executeReads();
+		memcpy(buffer, mappedRead.mappedMemory, bufferSize);
+	}
+
 	void RenderTarget::createRenderTarget(DirectX::XMFLOAT4 clearColor) {
 		Core::Application* app = Core::Application::getApplication();
 		auto device = app->getGraphicsContext()->getDevice();

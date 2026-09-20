@@ -47,17 +47,20 @@ namespace Graphics {
 		uint32_t frameIndex = 0;
 	};
 
-	struct MappedWrite {
+	struct MappedBuf {
 		void* mappedMemory;
 		BufferHandle handle;
 		uint32_t size;
 		uint64_t offset;
 	};
 
+
+	class Renderer;
+
 	class BufferManager
 	{
 	public:
-		BufferManager();
+		BufferManager(Renderer* renderer);
 		~BufferManager();
 
 		BufferHandle createBuffer(bool transient, size_t size);
@@ -65,14 +68,19 @@ namespace Graphics {
 
 		void clearOldBuffers(uint32_t frameIndex);
 
-		MappedWrite beginMappedWrite(BufferHandle handle, uint32_t size);
-		void submitMappedWrite(MappedWrite write, uint32_t bufOffset, uint32_t size);
+		MappedBuf beginMappedWrite(BufferHandle handle, uint32_t size);
+		void submitMappedWrite(MappedBuf& write, uint32_t bufOffset, uint32_t size);
+
+		MappedBuf beginMappedRead(BufferHandle handle, uint32_t size);
+		void submitMappedRead(MappedBuf& read, uint32_t offset, uint32_t size);
+		void executeReads();
+
 
 		//void memset(BufferHandle handle, uint32_t value, uint32_t offset, uint32_t size);
 		void write(BufferHandle handle, void* src, uint32_t offset, uint32_t size);
 
 		void copy(BufferHandle srcBuffer, BufferHandle dstBufffer);
-		void read(BufferHandle buffer, void* dst, uint32_t offset, uint32_t size);
+		//void read(BufferHandle buffer, void* dst, uint32_t offset, uint32_t size);
 
 		void transitionState(BufferHandle handle, D3D12_RESOURCE_STATES after);
 
@@ -82,6 +90,8 @@ namespace Graphics {
 		uint32_t allocateHeapChunk(size_t size, bool transient);
 
 		const BufferHandle TRANSIENT_HANDLE_MASK = 1ull << 63;
+
+		Renderer* m_Renderer = nullptr;
 
 		uint64_t stagedWriteSize = 0;
 		uint64_t stagedUploadOffset = 0;
@@ -96,6 +106,11 @@ namespace Graphics {
 
 		CopyBuffer m_UploadBuf;
 		CopyBuffer m_ReadbackBuf;
+
+		ID3D12Fence* m_ReadbackFence = nullptr;
+		HANDLE m_ReadbackFenceEvent = nullptr;
+
+		uint64_t readbackFenceValue = 0;
 
 		std::vector<CopyBuffer> m_OldCopyBuffers;
 

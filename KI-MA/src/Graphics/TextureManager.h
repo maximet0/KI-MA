@@ -7,13 +7,18 @@
 #include <filesystem>
 #include <string>
 
+
+
 namespace Graphics {
 
+	class Renderer;
 
 	struct TextureSetEntry {
 		uint32_t textureID;
 		std::string textureName;
 		std::filesystem::path texturePath;
+
+		uint32_t runtimeIndex = 0;
 	};
 
 	struct TextureSet {
@@ -24,7 +29,7 @@ namespace Graphics {
 
 	class TextureManager {
 	public:
-		TextureManager();
+		TextureManager(Renderer* renderer);
 		~TextureManager();
 
 		void beginEarlyTextureLoad();
@@ -34,6 +39,9 @@ namespace Graphics {
 
 		uint32_t createTextureSet(std::string setName);
 		void saveTextureSet(uint32_t setID, std::filesystem::path path);
+
+
+		void addTextureToSet(uint32_t setID, std::string name, uint32_t textureID);
 
 		void addTextureToSet(uint32_t setID, std::string name, std::filesystem::path path = "");
 		void modifyTextureInSet(uint32_t setID, std::string name, std::string newName, std::filesystem::path newPath);
@@ -54,7 +62,10 @@ namespace Graphics {
 		ID3D12DescriptorHeap*& getSRVDescriptorHeap() { return m_SRVHeap; }
 
 		uint32_t loadTextureFromPath(std::filesystem::path path);
+		uint32_t loadTextureFromMemory(const char* bytes, int32_t width, int32_t height, int32_t channels);
+
 	private:
+		Renderer* m_Renderer = nullptr;
 		ID3D12Fence* m_UploadFence = nullptr;
 		uint32_t m_UploadFenceValue = 0;
 		HANDLE m_UploadFenceEvent = nullptr;

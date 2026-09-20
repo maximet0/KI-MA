@@ -25,6 +25,8 @@ namespace Graphics {
 		uint32_t getRTVDescriptorIndex() { return m_RTVDescriptorIndex; }
 		uint32_t getDSVDescriptorIndex() { return m_DSVDescriptorIndex; }
 
+		void copyToCpuBuffer(void* buffer, size_t bufferSize);
+
 	private:
 		void createRenderTarget(DirectX::XMFLOAT4 clearColor);
 

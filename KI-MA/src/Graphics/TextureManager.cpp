@@ -9,7 +9,8 @@
 #include <fstream>
 
 namespace Graphics {
-	TextureManager::TextureManager()
+	TextureManager::TextureManager(Renderer* renderer)
+		: m_Renderer(renderer)
 	{
 		Core::Application* app = Core::Application::getApplication();
 		auto device = app->getGraphicsContext()->getDevice();
@@ -29,6 +30,18 @@ namespace Graphics {
 
 		m_UploadFenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
+		// Null Textur erstellen (2x2 pink und schwarz)
+		char nullTextureData[4 * 4] = {
+			255, 0, 255, 255,
+			0, 0, 0, 255,
+			0, 0, 0, 255,
+			255, 0, 255, 255,
+		};
+
+		beginEarlyTextureLoad();
+		uint32_t nullTextureID = loadTextureFromMemory(reinterpret_cast<const char*>(nullTextureData), 2, 2, 4);
+		endEarlyTextureLoad();
+		Core::Logger::Info("Null Texture ID: {}", nullTextureID);
 	}
 
 	TextureManager::~TextureManager()
@@ -38,8 +51,7 @@ namespace Graphics {
 
 	void TextureManager::beginEarlyTextureLoad()
 	{
-		auto renderer = Core::Application::getApplication()->getRenderer();
-		renderer->beginCmdList(0);
+		m_Renderer->beginCmdList(0);
 	}
 
 	void TextureManager::endEarlyTextureLoad()
@@ -47,8 +59,7 @@ namespace Graphics {
 		Core::Application* app = Core::Application::getApplication();
 		GraphicsContext* context = app->getGraphicsContext();
 
-		auto renderer = app->getRenderer();
-		renderer->endCmdList();
+		m_Renderer->endCmdList();
 		
 		uint32_t fenceValue = ++m_UploadFenceValue;
 		context->getQueue()->Signal(m_UploadFence, fenceValue);
@@ -108,6 +119,7 @@ namespace Graphics {
 			tex.texturePath = std::filesystem::path(pathStr);
 			if (std::filesystem::exists(tex.texturePath) == true) {
 				tex.textureID = loadTextureFromPath(tex.texturePath);
+				tex.runtimeIndex = m_TextureResources.size() - 1;
 			}
 			else Core::Logger::Warn("Missing Texture, {} not found.", tex.texturePath.string());
 		}
@@ -166,18 +178,40 @@ namespace Graphics {
 
 	DirectX::XMFLOAT2 TextureManager::getTextureSize(uint32_t textureID)
 	{
-		D3D12_RESOURCE_DESC desc = m_TextureResources[textureID]->GetDesc();
+		for (auto& textureSet : m_TextureSets) {
+			for (auto& entry : textureSet.textures) {
+				if (entry.textureID == textureID) {
+					D3D12_RESOURCE_DESC textureDesc = m_TextureResources[entry.runtimeIndex]->GetDesc();
+					return DirectX::XMFLOAT2(textureDesc.Width, textureDesc.Height);
+				}
+			}
+		}
 
-		return DirectX::XMFLOAT2(static_cast<float>(desc.Width), static_cast<float>(desc.Height));
+		//D3D12_RESOURCE_DESC desc = m_TextureResources[textureID]->GetDesc();
+
+		//return DirectX::XMFLOAT2(static_cast<float>(desc.Width), static_cast<float>(desc.Height));
+	}
+
+	void TextureManager::addTextureToSet(uint32_t setID, std::string name, uint32_t textureID)
+	{
+
+		TextureSet& set = getTextureSetByID(setID);
+
+		TextureSetEntry  entry{};
+		entry.textureID = textureID;
+		entry.textureName = name;
+		entry.texturePath = "";
+		entry.runtimeIndex = m_TextureResources.size() - 1;
+		set.textures.push_back(entry);
+
 	}
 
 	void TextureManager::addTextureToSet(uint32_t setID, std::string name, std::filesystem::path path)
 	{
-		auto renderer = Core::Application::getApplication()->getRenderer();
 		uint32_t textureID = 0;
 
 		if (std::filesystem::exists(path) == true) {
-			bool cmdListOpen = renderer->isCmdListOpen();
+			bool cmdListOpen = m_Renderer->isCmdListOpen();
 			if(!cmdListOpen) beginEarlyTextureLoad();
 			textureID = loadTextureFromPath(path);
 			if(!cmdListOpen) endEarlyTextureLoad();
@@ -188,19 +222,19 @@ namespace Graphics {
 		entry.textureID = textureID;
 		entry.textureName = name;
 		entry.texturePath = path;
+		if (std::filesystem::exists(path) == true) entry.runtimeIndex = m_TextureResources.size() - 1;
 
 		set.textures.push_back(entry);
 	}
 
 	void TextureManager::modifyTextureInSet(uint32_t setID, std::string name, std::string newName, std::filesystem::path newPath)
 	{
-		auto renderer = Core::Application::getApplication()->getRenderer();
 		TextureSet& set = getTextureSetByID(setID);
 
 		uint32_t textureID = 0;
 
 		if (std::filesystem::exists(newPath) == true) {
-			bool cmdListOpen = renderer->isCmdListOpen();
+			bool cmdListOpen = m_Renderer->isCmdListOpen();
 			if (!cmdListOpen) beginEarlyTextureLoad();
 			textureID = loadTextureFromPath(newPath);
 			if (!cmdListOpen) endEarlyTextureLoad();
@@ -211,6 +245,7 @@ namespace Graphics {
 				entry.textureName = newName;
 				entry.textureID = textureID;
 				entry.texturePath = newPath;
+				entry.runtimeIndex = m_TextureResources.size() - 1;
 				return;
 			}
 		}
@@ -266,13 +301,8 @@ namespace Graphics {
 		return handle;
 	}
 
-	uint32_t TextureManager::loadTextureFromPath(std::filesystem::path path)
-	{
+	uint32_t TextureManager::loadTextureFromMemory(const char* bytes, int32_t width, int32_t height, int32_t channels) {
 		Core::Application* app = Core::Application::getApplication();
-		auto renderer = app->getRenderer();
-		int32_t width, height;
-		int32_t channels;
-		char* data = (char*)stbi_load(path.string().c_str(), &width, &height, &channels, 4);
 
 		D3D12_HEAP_PROPERTIES heapProperties = {};
 		heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -302,17 +332,19 @@ namespace Graphics {
 		UINT64 uploadSize = 0;
 		app->getGraphicsContext()->getDevice()->GetCopyableFootprints(&resourceDesc, 0, 1, 0, &footprint, &numRows, &rowSizeBytes, &uploadSize);
 
-		BufferHandle uploadBuffer = renderer->getBufferManager().createBuffer(true, uploadSize);
+		BufferHandle uploadBuffer = m_Renderer->getBufferManager().createBuffer(true, uploadSize);
 
 
+		Graphics::MappedBuf mappedWrite = m_Renderer->getBufferManager().beginMappedWrite(uploadBuffer, uploadSize);
 		for (uint32_t row = 0; row < numRows; row++) {
-			renderer->getBufferManager().write(uploadBuffer, data + row * width * 4, footprint.Offset + row * footprint.Footprint.RowPitch, width * 4);
+			char* mappedMemory = (char*)mappedWrite.mappedMemory;
+			memcpy(mappedMemory + footprint.Offset + row * footprint.Footprint.RowPitch, bytes + row * width * 4, width * 4);
+			//m_Renderer->getBufferManager().write(uploadBuffer, bytes + row * width * 4, footprint.Offset + row * footprint.Footprint.RowPitch, width * 4);
 		}
-
-		stbi_image_free(data);
+		m_Renderer->getBufferManager().submitMappedWrite(mappedWrite, 0, uploadSize);
 
 		D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
-		srcLocation.pResource = renderer->getBufferManager().getBuffer(uploadBuffer).Get();
+		srcLocation.pResource = m_Renderer->getBufferManager().getBuffer(uploadBuffer).Get();
 		srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 		srcLocation.PlacedFootprint = footprint;
 
@@ -321,9 +353,9 @@ namespace Graphics {
 		dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 		dstLocation.SubresourceIndex = 0;
 
-		renderer->getCmdList()->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+		m_Renderer->getCmdList()->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
 
-		renderer->transition(m_TextureResources.back(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		m_Renderer->transition(m_TextureResources.back(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -336,6 +368,19 @@ namespace Graphics {
 
 		uint32_t index = 0;
 		app->getGraphicsContext()->getDevice()->CreateShaderResourceView(m_TextureResources.back(), &srvDesc, getNextSRVDescriptorHandle(index));
+
+		return index;
+	}
+
+	uint32_t TextureManager::loadTextureFromPath(std::filesystem::path path)
+	{
+		int32_t width, height;
+		int32_t channels;
+		char* data = (char*)stbi_load(path.string().c_str(), &width, &height, &channels, 4);
+
+		uint32_t index = loadTextureFromMemory(data, width, height, 4);
+
+		stbi_image_free((void*)data);
 
 		return index;
 	}

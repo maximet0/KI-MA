@@ -4,9 +4,14 @@
 #include "Graphics/Swapchain.h"
 #include "Events/EventSystem.h"
 
-#include "Game/GameInstance.h"
+#include "Game/GameEditor.h"
 
 namespace Core {
+
+	enum ApplcationMode {
+		Editor,
+		Game
+	};
 
 	// Hauptkalsse der Anwendung
 	class Application {
@@ -67,12 +72,18 @@ namespace Core {
 		Window* getWindow() { return m_Window; };
 
 		/// <summary>
+		/// Gibt zurück, ob die Anwendung geschlossen werden soll.
+		/// <summary>
+		bool requestingExit() { return m_RequestExit; };
+
+		/// <summary>
 		/// Schließt die Anwendung.
 		/// </summary>
 		void exit() { m_IsRunning = false; };
 
 	private:
 		bool m_IsRunning = true;
+		bool m_RequestExit = false;
 		Window* m_Window;
 		Graphics::GraphicsContext* m_Context;
 
@@ -83,7 +94,12 @@ namespace Core {
 
 		static Application* s_Application;
 
+		ApplcationMode m_Mode = ApplcationMode::Editor;
+
+		Game::GameEditor* m_GameEditor;
 		Game::GameInstance* m_GameInstance;
+
+		//Game::GameInstance* m_GameInstance;
 
 	};
 }

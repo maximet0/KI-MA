@@ -35,6 +35,9 @@ namespace Graphics {
 		m_RTVDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 		m_RTVHeapCPUStart = m_RTVHeap->GetCPUDescriptorHandleForHeapStart();
 
+		m_BufferManager = new BufferManager(this);
+		m_TextureManager = new TextureManager(this);
+
 		D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{};
 		dsvHeapDesc.NumDescriptors = 1024;
 		dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
@@ -113,8 +116,8 @@ namespace Graphics {
 		settings.topologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 		m_LinePipeline.recreatePipelineState(device.Get(), settings);
 
-		m_RectDataBuf = m_BufferManager.createBuffer(false, sizeof(RectData) * maxRects);
-		m_LineDataBuf = m_BufferManager.createBuffer(false, sizeof(LineData) * maxLines);
+		m_RectDataBuf = m_BufferManager->createBuffer(false, sizeof(RectData) * maxRects);
+		m_LineDataBuf = m_BufferManager->createBuffer(false, sizeof(LineData) * maxLines);
 	}
 
 	Renderer::~Renderer() {
@@ -130,12 +133,12 @@ namespace Graphics {
 		init_info.NumFramesInFlight = frameCount;
 		init_info.RTVFormat = Core::Application::getApplication()->getSwapchain()->getCurrentBackBuffer()->GetDesc().Format;
 		init_info.DSVFormat = DXGI_FORMAT_UNKNOWN;
-		init_info.SrvDescriptorHeap = m_TextureManager.getSRVDescriptorHeap();
+		init_info.SrvDescriptorHeap = m_TextureManager->getSRVDescriptorHeap();
 
 		init_info.SrvDescriptorAllocFn = [&](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_desc_handle, D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_desc_handle) {
 			uint32_t index = 0;
-			out_cpu_desc_handle->ptr = m_TextureManager.getNextSRVDescriptorHandle(index).ptr;
-			out_gpu_desc_handle->ptr = m_TextureManager.getSRVGPUDescriptorHandle(index).ptr;
+			out_cpu_desc_handle->ptr = m_TextureManager->getNextSRVDescriptorHandle(index).ptr;
+			out_gpu_desc_handle->ptr = m_TextureManager->getSRVGPUDescriptorHandle(index).ptr;
 		};
 
 		init_info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE cpu_desc_handle, D3D12_GPU_DESCRIPTOR_HANDLE gpu_desc_handle) {
@@ -153,7 +156,7 @@ namespace Graphics {
 		beginCmdList(frameIndex);
 		
 		// Descriptor Heap setzen
-		m_CmdList->SetDescriptorHeaps(1, &m_TextureManager.getSRVDescriptorHeap());
+		m_CmdList->SetDescriptorHeaps(1, &m_TextureManager->getSRVDescriptorHeap());
 
 		m_RectCount = 0;
 		m_CurrentRectOffset = 0;
@@ -161,8 +164,8 @@ namespace Graphics {
 		m_LineCount = 0;
 		m_CurrentLineOffset = 0;
 
-		m_RectMappedMem = m_BufferManager.beginMappedWrite(m_RectDataBuf, sizeof(RectData) * maxRects);
-		m_LineMappedMem = m_BufferManager.beginMappedWrite(m_LineDataBuf, sizeof(LineData) * maxLines);
+		m_RectMappedMem = m_BufferManager->beginMappedWrite(m_RectDataBuf, sizeof(RectData) * maxRects);
+		m_LineMappedMem = m_BufferManager->beginMappedWrite(m_LineDataBuf, sizeof(LineData) * maxLines);
 	}
 
 	void Renderer::submitRect(DirectX::XMFLOAT2 position, float zLayer, DirectX::XMFLOAT2 size, uint32_t textureHandle, bool repeatTexture)
@@ -170,7 +173,7 @@ namespace Graphics {
 		if (m_RectCount >= maxRects)
 			return;
 
-		DirectX::XMFLOAT2 texSize = m_TextureManager.getTextureSize(textureHandle);
+		DirectX::XMFLOAT2 texSize = m_TextureManager->getTextureSize(textureHandle);
 
 		RectData& rectData = ((RectData*)m_RectMappedMem.mappedMemory)[m_RectCount];
 		rectData.pos = { position.x + size.x / 2, position.y + size.y / 2 };
@@ -219,31 +222,31 @@ namespace Graphics {
 				2, 3, 0
 			};
 			
-			vertexBuf = m_BufferManager.createBuffer(false, sizeof(vertices));
-			indexBuf = m_BufferManager.createBuffer(false, sizeof(indices));
+			vertexBuf = m_BufferManager->createBuffer(false, sizeof(vertices));
+			indexBuf = m_BufferManager->createBuffer(false, sizeof(indices));
 			
-			m_BufferManager.write(vertexBuf, vertices, 0, sizeof(vertices));
-			m_BufferManager.write(indexBuf, indices, 0, sizeof(indices));
+			m_BufferManager->write(vertexBuf, vertices, 0, sizeof(vertices));
+			m_BufferManager->write(indexBuf, indices, 0, sizeof(indices));
 
-			m_BufferManager.transitionState(vertexBuf, D3D12_RESOURCE_STATE_GENERIC_READ);
-			m_BufferManager.transitionState(indexBuf, D3D12_RESOURCE_STATE_GENERIC_READ);
+			m_BufferManager->transitionState(vertexBuf, D3D12_RESOURCE_STATE_GENERIC_READ);
+			m_BufferManager->transitionState(indexBuf, D3D12_RESOURCE_STATE_GENERIC_READ);
 		}
 
-		m_BufferManager.submitMappedWrite(m_RectMappedMem, 0, m_RectCount * sizeof(RectData));
+		m_BufferManager->submitMappedWrite(m_RectMappedMem, 0, m_RectCount * sizeof(RectData));
 
 		m_DefaultPipeline.usePipeline(m_CmdList);
 
-		m_CmdList->SetGraphicsRootConstantBufferView(0, m_BufferManager.getBuffer(m_CurrentVPBuf)->GetGPUVirtualAddress());
-		m_CmdList->SetGraphicsRootShaderResourceView(1, m_BufferManager.getBuffer(m_RectDataBuf)->GetGPUVirtualAddress());
+		m_CmdList->SetGraphicsRootConstantBufferView(0, m_BufferManager->getBuffer(m_CurrentVPBuf)->GetGPUVirtualAddress());
+		m_CmdList->SetGraphicsRootShaderResourceView(1, m_BufferManager->getBuffer(m_RectDataBuf)->GetGPUVirtualAddress());
 
 
 		D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
-		vertexBufferView.BufferLocation = m_BufferManager.getBuffer(vertexBuf)->GetGPUVirtualAddress();
+		vertexBufferView.BufferLocation = m_BufferManager->getBuffer(vertexBuf)->GetGPUVirtualAddress();
 		vertexBufferView.SizeInBytes = sizeof(float) * 16;
 		vertexBufferView.StrideInBytes = sizeof(float) * 4;
 
 		D3D12_INDEX_BUFFER_VIEW indexBufferView = {};
-		indexBufferView.BufferLocation = m_BufferManager.getBuffer(indexBuf)->GetGPUVirtualAddress();
+		indexBufferView.BufferLocation = m_BufferManager->getBuffer(indexBuf)->GetGPUVirtualAddress();
 		indexBufferView.Format = DXGI_FORMAT_R32_UINT;
 		indexBufferView.SizeInBytes = sizeof(int) * 6;
 
@@ -251,7 +254,7 @@ namespace Graphics {
 		m_CmdList->IASetVertexBuffers(0, 1, &vertexBufferView);
 		m_CmdList->IASetIndexBuffer(&indexBufferView);
 
-		m_CmdList->SetGraphicsRootDescriptorTable(3, m_TextureManager.getSRVGPUDescriptorHandle(0));
+		m_CmdList->SetGraphicsRootDescriptorTable(3, m_TextureManager->getSRVGPUDescriptorHandle(0));
 		m_CmdList->SetGraphicsRoot32BitConstant(2, m_CurrentRectOffset, 0);
 
 		m_CmdList->DrawIndexedInstanced(6, m_CurrentRectCount, 0, 0, m_CurrentRectOffset);
@@ -262,15 +265,15 @@ namespace Graphics {
 
 	void Renderer::drawLines()
 	{
-		m_BufferManager.submitMappedWrite(m_LineMappedMem,0 , m_LineCount * sizeof(LineData));
+		m_BufferManager->submitMappedWrite(m_LineMappedMem,0 , m_LineCount * sizeof(LineData));
 
 		
 		m_LinePipeline.usePipeline(m_CmdList);
 
-		m_CmdList->SetGraphicsRootConstantBufferView(0, m_BufferManager.getBuffer(m_CurrentVPBuf)->GetGPUVirtualAddress());
+		m_CmdList->SetGraphicsRootConstantBufferView(0, m_BufferManager->getBuffer(m_CurrentVPBuf)->GetGPUVirtualAddress());
 
 		D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
-		vertexBufferView.BufferLocation = m_BufferManager.getBuffer(m_LineDataBuf)->GetGPUVirtualAddress();
+		vertexBufferView.BufferLocation = m_BufferManager->getBuffer(m_LineDataBuf)->GetGPUVirtualAddress();
 		vertexBufferView.SizeInBytes = sizeof(LineData) * m_LineCount;
 		vertexBufferView.StrideInBytes = sizeof(LineData) / 2;
 
@@ -342,7 +345,7 @@ namespace Graphics {
 		}
 
 		frameIndex = app->getSwapchain()->getBackBufferIndex();
-		m_BufferManager.clearOldBuffers(frameIndex);
+		m_BufferManager->clearOldBuffers(frameIndex);
 	}
 
 	void Renderer::beginRenderTarget(RenderTarget* renderTarget, DirectX::XMFLOAT2 cameraPosition, float cameraZoom)
@@ -377,14 +380,14 @@ namespace Graphics {
 
 		m_CurrentRenderTarget = renderTarget;
 
-		m_CurrentVPBuf = m_BufferManager.createBuffer(true, sizeof(DirectX::XMMATRIX));
+		m_CurrentVPBuf = m_BufferManager->createBuffer(true, sizeof(DirectX::XMMATRIX));
 
 		DirectX::XMMATRIX cameraView = DirectX::XMMatrixTranslation(-cameraPosition.x, -cameraPosition.y, 0.0f);
 		cameraView = cameraView * DirectX::XMMatrixScaling(cameraZoom, cameraZoom, 1.0f) ;
 		DirectX::XMMATRIX cameraProj = DirectX::XMMatrixOrthographicOffCenterLH(-(float)renderTarget->getSize().x * 0.5f, (float)renderTarget->getSize().x * 0.5f, (float)renderTarget->getSize().y * 0.5f, -(float)renderTarget->getSize().y * 0.5f, 0.0f, 10.0f);
 		DirectX::XMMATRIX cameraVP = cameraView * cameraProj;
 
-		m_BufferManager.write(m_CurrentVPBuf, &cameraVP, 0, sizeof(DirectX::XMMATRIX));
+		m_BufferManager->write(m_CurrentVPBuf, &cameraVP, 0, sizeof(DirectX::XMMATRIX));
 	}
 
 	void Renderer::endRenderTarget(RenderTarget* renderTarget)
@@ -433,7 +436,7 @@ namespace Graphics {
 	D3D12_CPU_DESCRIPTOR_HANDLE Renderer::getNextDSVDescriptorHandle(uint32_t& index)
 	{
 		D3D12_CPU_DESCRIPTOR_HANDLE handle = m_DSVHeapCPUStart;
-		handle.ptr += m_RTVDescriptorSize * m_DSVHeapCurrentIndex;
+		handle.ptr += m_DSVDescriptorSize * m_DSVHeapCurrentIndex;
 		index = m_DSVHeapCurrentIndex;
 		m_DSVHeapCurrentIndex++;
 		return handle;

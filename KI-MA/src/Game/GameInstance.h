@@ -4,6 +4,10 @@
 
 #include "Graphics/RenderTarget.h"
 
+namespace Core {
+	class Application;
+}
+
 namespace Game {
 
 	struct GameSettings {
@@ -14,7 +18,7 @@ namespace Game {
 
 	class GameInstance {
 	public:
-		GameInstance(GameSettings settings);
+		GameInstance(GameSettings settings = {});
 		~GameInstance();
 
 		void setGameSettings(GameSettings settings);
@@ -38,17 +42,12 @@ namespace Game {
 		GameSettings m_GameSettings;
 		GameLevel m_GameLevel;
 
-		bool m_SimulationMode = false;
 		bool m_Paused = false;
-		bool m_GridLock = true;
-		bool m_DrawMode = false;
-		GameObject m_DrawObject;
 
 		DirectX::XMFLOAT2 m_CameraPosition = { 0, 0 };
 		float m_CameraZoom = 1.0f;
 
-		bool m_CameraFollowPlayer = true;
-
+		FollowPlayerAxis m_CameraFollowPlayer = FollowPlayerAxis::FollowPlayerBoth;
 
 		DirectX::XMFLOAT2 m_MousePos = { 0, 0 };
 		DirectX::XMFLOAT2 m_LastMousePos = { 0, 0 };
@@ -60,7 +59,9 @@ namespace Game {
 
 		uint32_t m_TextureSetID;
 
+		friend class Core::Application;
 		friend class GameTriggers;
+		friend class GameEditor;
 	};
 
 }
