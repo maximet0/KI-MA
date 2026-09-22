@@ -1,5 +1,5 @@
 #pragma once
-
+#include <unordered_map>
 #include "GameObject.h"
 
 #include "GameInstance.h"
@@ -69,6 +69,8 @@ namespace Game {
 		DirectX::XMFLOAT2 m_MouseDelta = { 0, 0 };
 
 		DirectX::XMINT2 m_MouseWheelDelta = { 0, 0 };
+
+		std::unordered_map<std::filesystem::path, uint32_t> m_ThumbnailCache;
 	};
 }
 

@@ -302,6 +302,7 @@ namespace Game {
 
 		auto textureHandle = renderer->getTextureManager().getSRVGPUDescriptorHandle(m_GameInstance.getTarget()->getSRVDescriptorIndex());
 		ImGui::Image((ImTextureID)(uintptr_t)textureHandle.ptr, ImVec2(width, height));
+
 		DirectX::XMFLOAT2 offset = { ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y };
 		bool gameViewLeftMouseDown = ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left);
 		bool gameViewRightMouseDown = ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Right);
@@ -1014,13 +1015,20 @@ namespace Game {
 					m_ThumbnailGenPaths.push_back(dir.path());
 				}
 				else {
-					std::ifstream file(thumbnailPath, std::ios::binary);
+					if (m_ThumbnailCache.contains(thumbnailPath))
+						texture = m_ThumbnailCache[thumbnailPath];
+					else {
+						std::ifstream file(thumbnailPath, std::ios::binary);
 
-					uint32_t* data = new uint32_t[128 * 128];
-					file.read((char*)data, 128 * 128 * sizeof(uint32_t));
-					texture = texMan.loadTextureFromMemory((const char*)data, 128, 128, 4);
-					file.close();
-					delete[] data;
+						uint32_t* data = new uint32_t[128 * 128];
+						file.read((char*)data, 128 * 128 * sizeof(uint32_t));
+						texture = texMan.loadTextureFromMemory((const char*)data, 128, 128, 4);
+						file.close();
+						delete[] data;
+						m_ThumbnailCache[thumbnailPath] = texture;
+					}
+
+					
 				}
 			}
 			else if (dir.path().extension() == ".thumb") continue;

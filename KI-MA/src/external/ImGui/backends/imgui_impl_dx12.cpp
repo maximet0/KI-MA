@@ -93,6 +93,12 @@ struct ImGui_ImplDX12_Texture
     ImGui_ImplDX12_Texture()    { memset((void*)this, 0, sizeof(*this)); }
 };
 
+struct VERTEX_CONSTANT_BUFFER_DX12
+{
+    float   mvp[4][4];
+};
+
+
 struct ImGui_ImplDX12_Data
 {
     ImGui_ImplDX12_InitInfo     InitInfo;
@@ -121,6 +127,8 @@ struct ImGui_ImplDX12_Data
     ID3D12Resource*             pTexUploadBuffer;
     UINT                        pTexUploadBufferSize;
     void*                       pTexUploadBufferMapped;
+
+	VERTEX_CONSTANT_BUFFER_DX12 VertexConstantBuffer;
 
     ImGui_ImplDX12_Data()       { memset((void*)this, 0, sizeof(*this)); }
 };
@@ -211,14 +219,16 @@ struct ImGui_ImplDX12_ViewportData
     }
 };
 
-struct VERTEX_CONSTANT_BUFFER_DX12
-{
-    float   mvp[4][4];
-};
 
 // Forward Declarations
 static void ImGui_ImplDX12_InitMultiViewportSupport();
 static void ImGui_ImplDX12_ShutdownMultiViewportSupport();
+
+
+//FIX
+// [https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-a-root-signature]
+// "If a root signature is changed on a command list, all previous root signature bindings become stale 
+// and all newly expected bindings must be set before Draw/Dispatch; otherwise, the behavior is undefined."
 
 // Functions
 static void ImGui_ImplDX12_SetupSamplerLinear(ID3D12GraphicsCommandList* command_list)
@@ -226,6 +236,7 @@ static void ImGui_ImplDX12_SetupSamplerLinear(ID3D12GraphicsCommandList* command
     ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();
     command_list->SetPipelineState(bd->pPipelineStateLinear);
     command_list->SetGraphicsRootSignature(bd->pRootSignatureLinear);
+    command_list->SetGraphicsRoot32BitConstants(0, 16, &bd->VertexConstantBuffer, 0);
 }
 
 static void ImGui_ImplDX12_SetupSamplerNearest(ID3D12GraphicsCommandList* command_list)
@@ -233,13 +244,15 @@ static void ImGui_ImplDX12_SetupSamplerNearest(ID3D12GraphicsCommandList* comman
     ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();
     command_list->SetPipelineState(bd->pPipelineStateNearest);
     command_list->SetGraphicsRootSignature(bd->pRootSignatureNearest);
+    command_list->SetGraphicsRoot32BitConstants(0, 16, &bd->VertexConstantBuffer, 0);
 }
 
 static void ImGui_ImplDX12_SetupRenderState(ImDrawData* draw_data, ID3D12GraphicsCommandList* command_list, ImGui_ImplDX12_RenderBuffers* fr)
 {
+
     // Setup orthographic projection matrix into our constant buffer
     // Our visible imgui space lies from draw_data->DisplayPos (top left) to draw_data->DisplayPos+data_data->DisplaySize (bottom right).
-    VERTEX_CONSTANT_BUFFER_DX12 vertex_constant_buffer;
+	ImGui_ImplDX12_Data* bd = ImGui_ImplDX12_GetBackendData();
     {
         float L = draw_data->DisplayPos.x;
         float R = draw_data->DisplayPos.x + draw_data->DisplaySize.x;
@@ -252,7 +265,7 @@ static void ImGui_ImplDX12_SetupRenderState(ImDrawData* draw_data, ID3D12Graphic
             { 0.0f,         0.0f,           0.5f,       0.0f },
             { (R+L)/(L-R),  (T+B)/(B-T),    0.5f,       1.0f },
         };
-        memcpy(&vertex_constant_buffer.mvp, mvp, sizeof(mvp));
+        memcpy(&bd->VertexConstantBuffer.mvp, mvp, sizeof(mvp));
     }
 
     // Setup viewport
@@ -279,7 +292,7 @@ static void ImGui_ImplDX12_SetupRenderState(ImDrawData* draw_data, ID3D12Graphic
     command_list->IASetIndexBuffer(&ibv);
     command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     ImGui_ImplDX12_SetupSamplerLinear(command_list);
-    command_list->SetGraphicsRoot32BitConstants(0, 16, &vertex_constant_buffer, 0);
+    //command_list->SetGraphicsRoot32BitConstants(0, 16, &vertex_constant_buffer, 0);
 
     // Setup blend factor
     const float blend_factor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -711,42 +724,16 @@ bool    ImGui_ImplDX12_CreateDeviceObjects()
             D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
             D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
 
-        // Load d3d12.dll and D3D12SerializeRootSignature() function address dynamically to facilitate using with D3D12On7.
-        // See if any version of d3d12.dll is already loaded in the process. If so, give preference to that.
-        static HINSTANCE d3d12_dll = ::GetModuleHandleA("d3d12.dll");
-        if (d3d12_dll == nullptr)
-        {
-            // Attempt to load d3d12.dll from local directories. This will only succeed if
-            // (1) the current OS is Windows 7, and
-            // (2) there exists a version of d3d12.dll for Windows 7 (D3D12On7) in one of the following directories.
-            // See https://github.com/ocornut/imgui/pull/3696 for details.
-            const char* localD3d12Paths[] = { ".\\d3d12.dll", ".\\d3d12on7\\d3d12.dll", ".\\12on7\\d3d12.dll" }; // A. current directory, B. used by some games, C. used in Microsoft D3D12On7 sample
-            for (int i = 0; i < IM_COUNTOF(localD3d12Paths); i++)
-                if ((d3d12_dll = ::LoadLibraryA(localD3d12Paths[i])) != nullptr)
-                    break;
-
-            // If failed, we are on Windows >= 10.
-            if (d3d12_dll == nullptr)
-                d3d12_dll = ::LoadLibraryA("d3d12.dll");
-
-            if (d3d12_dll == nullptr)
-                return false;
-        }
-
-        _PFN_D3D12_SERIALIZE_ROOT_SIGNATURE D3D12SerializeRootSignatureFn = (_PFN_D3D12_SERIALIZE_ROOT_SIGNATURE)(void*)::GetProcAddress(d3d12_dll, "D3D12SerializeRootSignature");
-        if (D3D12SerializeRootSignatureFn == nullptr)
-            return false;
-
         ID3DBlob* blob = nullptr;
-        if (D3D12SerializeRootSignatureFn(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, nullptr) != S_OK)
+        if (D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, nullptr) != S_OK)
             return false;
 
         bd->pd3dDevice->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&bd->pRootSignatureLinear));
         blob->Release();
-
+        
         // Nearest sampler
         staticSampler[0].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-        if (D3D12SerializeRootSignatureFn(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, nullptr) != S_OK)
+        if (D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &blob, nullptr) != S_OK)
             return false;
 
         bd->pd3dDevice->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&bd->pRootSignatureNearest));

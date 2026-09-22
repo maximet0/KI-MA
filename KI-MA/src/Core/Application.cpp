@@ -58,8 +58,7 @@ namespace Core {
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
 		Game::GameSettings settings;
-		settings.showColliders = false;
-		settings.levelPath = "../../testLevel.lvl";
+		settings.showColliders = false;		settings.levelPath = "../../Content/Levels/testLevel.lvl";
 
 		m_GameEditor = new Game::GameEditor();
 		m_GameInstance = new Game::GameInstance(settings);
@@ -203,8 +202,6 @@ namespace Core {
 
 				ImGui::EndMenuBar();
 			}
-
-
 
 			ImGui::End();
 
