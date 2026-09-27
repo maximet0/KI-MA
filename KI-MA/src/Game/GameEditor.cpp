@@ -204,19 +204,32 @@ namespace Game {
 		if (m_SelectionType == SelectionType::LevelObject) {
 			GameObject& selectedObj = m_GameInstance.m_GameLevel.getGameObject((ObjectID)m_Selection);
 		
-			uint32_t sizeX = (std::max)((uint32_t)selectedObj.size.x, 1u);
-			uint32_t sizeY = (std::max)((uint32_t)selectedObj.size.y, 1u);
+			float sizeX = selectedObj.size.x;
+			float sizeY = selectedObj.size.y;
 			
-			renderer->submitLine({ selectedObj.position.x, selectedObj.position.y }, { selectedObj.position.x + sizeX, selectedObj.position.y }, 0xFFFFFFFF);
-			renderer->submitLine({ selectedObj.position.x + sizeX, selectedObj.position.y }, { selectedObj.position.x + sizeX, selectedObj.position.y + sizeY }, 0xFFFFFFFF);
-			renderer->submitLine({ selectedObj.position.x + sizeX, selectedObj.position.y + sizeY }, { selectedObj.position.x, selectedObj.position.y + sizeY }, 0xFFFFFFFF);
-			renderer->submitLine({ selectedObj.position.x, selectedObj.position.y + sizeY }, { selectedObj.position.x, selectedObj.position.y }, 0xFFFFFFFF);
+			float posX = selectedObj.position.x;
+			float posY = selectedObj.position.y;
+
+			if (m_ResizeCollider) {
+				sizeX = selectedObj.collider.size.x;
+				sizeY = selectedObj.collider.size.y;
+
+				posX = selectedObj.position.x + selectedObj.collider.offset.x;
+				posY = selectedObj.position.y + selectedObj.collider.offset.y;
+			}
+
+
+
+			renderer->submitLine({ posX, posY }, { posX + sizeX, posY }, 0xFFFFFFFF);
+			renderer->submitLine({ posX + sizeX, posY }, { posX + sizeX, posY + sizeY }, 0xFFFFFFFF);
+			renderer->submitLine({ posX + sizeX, posY + sizeY }, { posX, posY + sizeY }, 0xFFFFFFFF);
+			renderer->submitLine({ posX, posY + sizeY }, { posX, posY }, 0xFFFFFFFF);
 
 			float handleSize = (std::min)(8.0f, 8.0f * m_GameInstance.m_CameraZoom);
-			renderer->submitRect({ selectedObj.position.x - handleSize * 0.5f, selectedObj.position.y + sizeY * 0.5f - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);
-			renderer->submitRect({ selectedObj.position.x + sizeX * 0.5f - handleSize * 0.5f, selectedObj.position.y - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);
-			renderer->submitRect({ selectedObj.position.x + sizeX - handleSize * 0.5f, selectedObj.position.y + sizeY * 0.5f - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);
-			renderer->submitRect({ selectedObj.position.x + sizeX * 0.5f - handleSize * 0.5f, selectedObj.position.y + sizeY - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);
+			renderer->submitRect({ posX - handleSize * 0.5f, posY + sizeY * 0.5f - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);
+			renderer->submitRect({ posX + sizeX * 0.5f - handleSize * 0.5f, posY - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);
+			renderer->submitRect({ posX + sizeX - handleSize * 0.5f, posY + sizeY * 0.5f - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);
+			renderer->submitRect({ posX + sizeX * 0.5f - handleSize * 0.5f, posY + sizeY - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);
 		}
 
 		renderer->drawRects();
@@ -282,6 +295,9 @@ namespace Game {
 
 		ImGui::Checkbox("Draw ObjTemplate", &m_DrawEnabled);
 
+		ImGui::SameLine();
+		ImGui::Checkbox("Resize Collider", &m_ResizeCollider);
+
 		float aspectRatio = (float)m_GameInstance.getTarget()->getSize().x / (float)m_GameInstance.getTarget()->getSize().y;
 
 		uint32_t height = ImGui::GetContentRegionAvail().y;
@@ -325,6 +341,10 @@ namespace Game {
 		DirectX::XMFLOAT2 worldPos;
 		DirectX::XMStoreFloat2(&worldPos, worldPosVec);
 
+		static bool objectScaleDrag1 = false;
+		static bool objectScaleDrag2 = false;
+		static bool objectScaleDrag3 = false;
+		static bool objectScaleDrag4 = false;
 
 		ObjectID clickedID = 0;
 		if (gameViewLeftMouseDown || gameViewRightMouseDown) {
@@ -336,7 +356,7 @@ namespace Game {
 					worldPos.y >= obj.position.y && worldPos.y <= obj.position.y + obj.size.y) ||
 					(worldPos.x >= obj.position.x + obj.collider.offset.x && worldPos.x <= obj.position.x + obj.collider.offset.x + obj.collider.size.x &&
 					worldPos.y >= obj.position.y + obj.collider.offset.y && worldPos.y <= obj.position.y + obj.collider.offset.y + obj.collider.size.y)) {
-					if (gameViewLeftMouseDown) {
+					if (gameViewLeftMouseDown && !objectScaleDrag1 && !objectScaleDrag2 && !objectScaleDrag3 && !objectScaleDrag4) {
 						m_Selection = (void*)(obj.id);
 						m_SelectionType = SelectionType::LevelObject;
 					}
@@ -345,10 +365,128 @@ namespace Game {
 					break;
 				}
 			}
+			if (m_LastClickedObject == 0  && !objectScaleDrag1 && !objectScaleDrag2 && !objectScaleDrag3 && !objectScaleDrag4)
+				m_SelectionType = SelectionType::None;
 		}
 
-		static bool cameraDrag = false;
 
+		static bool cameraDrag = false;
+		if (ImGui::IsKeyDown(ImGuiKey_LeftShift) && gameViewRightMouseDown) cameraDrag = true;
+		if (!ImGui::IsMouseDown(ImGuiMouseButton_Right)) cameraDrag = false;
+
+
+
+		if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+			objectScaleDrag1 = false;
+			objectScaleDrag2 = false;
+			objectScaleDrag3 = false;
+			objectScaleDrag4 = false;
+			GameObject& selectedObj = m_GameInstance.m_GameLevel.getGameObject((ObjectID)m_Selection);
+
+			if (m_GridLock) {
+				selectedObj.position.x = std::round(selectedObj.position.x / 32.0f) * 32.0f;
+				selectedObj.position.y = std::round(selectedObj.position.y / 32.0f) * 32.0f;
+				selectedObj.size.x = std::round(selectedObj.size.x / 32.0f) * 32.0f;
+				selectedObj.size.y = std::round(selectedObj.size.y / 32.0f) * 32.0f;
+
+				selectedObj.collider.offset.x = std::round(selectedObj.collider.offset.x / 32.0f) * 32.0f;
+				selectedObj.collider.offset.y = std::round(selectedObj.collider.offset.y / 32.0f) * 32.0f;
+				selectedObj.collider.size.x = std::round(selectedObj.collider.size.x / 32.0f) * 32.0f;
+				selectedObj.collider.size.y = std::round(selectedObj.collider.size.y / 32.0f) * 32.0f;
+			}
+
+
+		}
+
+		if (!cameraDrag && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+			if (m_SelectionType == SelectionType::LevelObject) {
+				GameObject& selectedObj = m_GameInstance.m_GameLevel.getGameObject((ObjectID)m_Selection);
+				
+
+				float sizeX = selectedObj.size.x;
+				float sizeY = selectedObj.size.y;
+
+				float posX = selectedObj.position.x;
+				float posY = selectedObj.position.y;
+
+				if (m_ResizeCollider) {
+					sizeX = selectedObj.collider.size.x;
+					sizeY = selectedObj.collider.size.y;
+
+					posX = selectedObj.position.x + selectedObj.collider.offset.x;
+					posY = selectedObj.position.y + selectedObj.collider.offset.y;
+				}
+
+				uint32_t handleHitSize = 10;
+
+				if (worldPos.x >= posX - handleHitSize * 0.5f && worldPos.x <= posX + handleHitSize * 0.5f &&
+					worldPos.y >= posY + sizeY * 0.5f - handleHitSize * 0.5f && worldPos.y <= posY + sizeY * 0.5f + handleHitSize * 0.5f) {
+					objectScaleDrag1 = true;
+				}
+				else if (worldPos.x >= posX + sizeX * 0.5f - handleHitSize * 0.5f && worldPos.x <= posX + sizeX	 * 0.5f + handleHitSize * 0.5f &&
+					worldPos.y >= posY - handleHitSize * 0.5f && worldPos.y <= posY + handleHitSize * 0.5f) {
+					objectScaleDrag2 = true;
+	
+				}
+				else if (worldPos.x >= posX + sizeX - handleHitSize * 0.5f && worldPos.x <= posX + sizeX + handleHitSize * 0.5f &&
+					worldPos.y >= posY + sizeY * 0.5f - handleHitSize * 0.5f && worldPos.y <= posY + sizeY * 0.5f + handleHitSize * 0.5f) {
+					objectScaleDrag3 = true;
+				}
+				else if (worldPos.x >= posX + sizeX * 0.5f - handleHitSize * 0.5f && worldPos.x <= posX + sizeX * 0.5f + handleHitSize * 0.5f &&
+					worldPos.y >= posY + sizeY - handleHitSize * 0.5f && worldPos.y <= posY + sizeY + handleHitSize * 0.5f) {
+					objectScaleDrag4 = true;
+				}
+				else {
+
+				}
+			}
+		}
+
+		if (objectScaleDrag1) {
+			GameObject& selectedObj = m_GameInstance.m_GameLevel.getGameObject((ObjectID)m_Selection);
+
+			if (m_ResizeCollider) {
+				selectedObj.collider.offset.x += m_MouseDelta.x * m_GameInstance.m_CameraZoom * scaleRatio;
+				selectedObj.collider.size.x -= m_MouseDelta.x * m_GameInstance.m_CameraZoom * scaleRatio;
+			}
+			else {
+				selectedObj.position.x += m_MouseDelta.x * m_GameInstance.m_CameraZoom * scaleRatio;
+				selectedObj.size.x -= m_MouseDelta.x * m_GameInstance.m_CameraZoom * scaleRatio;
+			}
+
+		}
+		else if (objectScaleDrag2) {
+			GameObject& selectedObj = m_GameInstance.m_GameLevel.getGameObject((ObjectID)m_Selection);
+
+			if (m_ResizeCollider) {
+				selectedObj.collider.offset.y += m_MouseDelta.y * m_GameInstance.m_CameraZoom * scaleRatio;
+				selectedObj.collider.size.y -= m_MouseDelta.y * m_GameInstance.m_CameraZoom * scaleRatio;
+			}
+			else {
+				selectedObj.position.y += m_MouseDelta.y * m_GameInstance.m_CameraZoom * scaleRatio;
+				selectedObj.size.y -= m_MouseDelta.y * m_GameInstance.m_CameraZoom * scaleRatio;
+			}
+		}
+		else if (objectScaleDrag3) {
+			GameObject& selectedObj = m_GameInstance.m_GameLevel.getGameObject((ObjectID)m_Selection);
+
+			if (m_ResizeCollider) {
+				selectedObj.collider.size.x += m_MouseDelta.x * m_GameInstance.m_CameraZoom * scaleRatio;
+			}
+			else {
+				selectedObj.size.x += m_MouseDelta.x * m_GameInstance.m_CameraZoom * scaleRatio;
+			}
+		}
+		else if (objectScaleDrag4) {
+			GameObject& selectedObj = m_GameInstance.m_GameLevel.getGameObject((ObjectID)m_Selection);
+
+			if (m_ResizeCollider) {
+				selectedObj.collider.size.y += m_MouseDelta.y * m_GameInstance.m_CameraZoom * scaleRatio;
+			}
+			else {
+				selectedObj.size.y += m_MouseDelta.y * m_GameInstance.m_CameraZoom * scaleRatio;
+			}
+		}
 
 		if (!cameraDrag && ImGui::BeginPopupContextWindow(0, ImGuiPopupFlags_NoOpenOverItems)) {
 			if (m_LastClickedObject != 0) {
@@ -366,8 +504,6 @@ namespace Game {
 			ImGui::EndPopup();
 		}
 
-		if (ImGui::IsKeyDown(ImGuiKey_LeftShift) && gameViewRightMouseDown) cameraDrag = true;
-		if (!ImGui::IsMouseDown(ImGuiMouseButton_Right)) cameraDrag = false;
 
 		if (cameraDrag) {
 			m_GameInstance.m_CameraPosition.x -= m_MouseDelta.x * m_GameInstance.m_CameraZoom;

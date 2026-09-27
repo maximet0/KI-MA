@@ -51,6 +51,8 @@ namespace Game {
 		bool m_GridLock = true;
 		bool m_ShowColliders = true;
 
+		bool m_ResizeCollider = true;
+
 		bool m_SimulationMode = false;
 		bool m_ActiveLevelSaved = true;
 

@@ -11,6 +11,9 @@
 #include "Logger.h"
 #include <thread>
 
+#include "AI/Math/Tensor.h"
+#include "AI/Math/TensorMath.h"
+
 namespace Core {
 	Application* Application::s_Application = nullptr;
 
@@ -43,6 +46,80 @@ namespace Core {
 	}
 
 	void Application::onStart() {
+		{
+			AI::Tensor<float> a({ 2, 2 });
+			a(0, 0) = 0.5f;
+			a(0, 1) = 1.0f;
+			a(1, 0) = 1.5f;
+			a(1, 1) = 2.0f;
+
+			Core::Logger::Debug("A Tensor (0, 0): {}", a(0, 0));
+			Core::Logger::Debug("A Tensor (0, 1): {}", a(0, 1));
+			Core::Logger::Debug("A Tensor (1, 0): {}", a(1, 0));
+			Core::Logger::Debug("A Tensor (1, 1): {}", a(1, 1));
+
+
+			AI::Tensor<float> b({ 2 });
+			b(0) = 2.0f;
+			b(1) = 3.0f;
+
+			AI::TensorView<float> viewB(b, 0, b.getTotalSize(), { 2 });
+			Core::Logger::Debug("B TensorView (0): {}", viewB(0));
+			Core::Logger::Debug("B TensorView (1): {}", viewB(1));
+
+			auto result = a.view();
+			AI::Math::Add<float>(a.view(), b.view(), result);
+
+			Core::Logger::Debug("Add Tensor (0, 0): {}", result(0, 0));
+			Core::Logger::Debug("Add Tensor (0, 1): {}", result(0, 1));
+			Core::Logger::Debug("Add Tensor (1, 0): {}", result(1, 0));
+			Core::Logger::Debug("Add Tensor (1, 1): {}", result(1, 1));
+
+		}
+
+		{
+			AI::Tensor<float> a({ 2, 3, 2 });
+
+			float value = 1.0f;
+
+			for (size_t i = 0; i < 2; i++)
+			{
+				for (size_t j = 0; j < 3; j++)
+				{
+					for (size_t k = 0; k < 2; k++)
+					{
+						a(i, j, k) = value++;
+					}
+				}
+			}
+
+			AI::Tensor<float> b({ 3, 1 });
+			b(0, 0) = 10.0f;
+			b(1, 0) = 20.0f;
+			b(2, 0) = 30.0f;
+
+			AI::Tensor<float> resultTensor({ 2, 3, 2 });
+			auto result = resultTensor.view();
+
+			AI::Math::Add<float>(a.view(), b.view(), result);
+
+			for (size_t i = 0; i < 2; i++)
+			{
+				for (size_t j = 0; j < 3; j++)
+				{
+					for (size_t k = 0; k < 2; k++)
+					{
+						Core::Logger::Debug(
+							"3D Result ({}, {}, {}): {}",
+							i, j, k,
+							result(i, j, k)
+						);
+					}
+				}
+			}
+
+		}
+
 		//Erstellt das Fenster, den Grafik-Kontext, die Swapchain und den Renderer.
 		m_EventSystem = new Events::EventSystem();
 		m_Window = new Window(L"Application");

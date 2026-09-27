@@ -121,6 +121,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\AI\Math\Tensor.cpp" />
     <ClCompile Include="src\Core\Application.cpp" />
     <ClCompile Include="src\Core\Logger.cpp" />
     <ClCompile Include="src\Events\EventSystem.cpp" />
@@ -150,6 +151,8 @@
     <ClCompile Include="src\Graphics\Swapchain.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\AI\Math\Tensor.h" />
+    <ClInclude Include="src\AI\Math\TensorMath.h" />
     <ClInclude Include="src\Core\Application.h" />
     <ClInclude Include="src\Events\Callbacks.h" />
     <ClInclude Include="src\Events\Event.h" />
