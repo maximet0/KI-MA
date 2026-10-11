@@ -33,6 +33,7 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
@@ -122,6 +123,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\AI\Math\Tensor.cpp" />
+    <ClCompile Include="src\AI\Math\TensorMath.cpp" />
+    <ClCompile Include="src\AI\Math\TensorMathMatMul.cpp" />
     <ClCompile Include="src\Core\Application.cpp" />
     <ClCompile Include="src\Core\Logger.cpp" />
     <ClCompile Include="src\Events\EventSystem.cpp" />
@@ -205,7 +208,13 @@
   <ItemGroup>
     <Image Include="C:\Users\maxim\Downloads\BOX-1.png.png" />
   </ItemGroup>
+  <ItemGroup>
+    <MASM Include="src\AI\Math\TensorMathMatMul_.asm">
+      <FileType>MASM</FileType>
+    </MASM>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
   </ImportGroup>
 </Project>

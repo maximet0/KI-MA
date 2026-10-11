@@ -44,12 +44,39 @@ namespace AI {
 			m_TotalSize *= dimSize;
 
 		m_DataPtr = new T[m_TotalSize];
+		m_CachedPackedDataPtr = nullptr;
 	}
 
 	template<typename T>
 	Tensor<T>::~Tensor()
 	{
 		delete[] m_DataPtr;
+
+		if (m_CachedPackedDataPtr)
+			delete[] m_CachedPackedDataPtr;
+	}
+
+	template<typename T>
+	void Tensor<T>::genPackedData(uint32_t NSize, uint32_t KSize)
+	{
+		m_CachedPackedDataPtr = new T[m_TotalSize];
+
+		float* dstPtr = m_CachedPackedDataPtr;
+		size_t n = 0;
+		for (; n + 16 <= NSize; n += 16) {
+			const float* src = m_DataPtr + n;
+
+			for (size_t k = 0; k < KSize; k++) {
+				__m256 src1 = _mm256_load_ps(src);
+				__m256 src2 = _mm256_load_ps(src + 8);
+
+				_mm256_store_ps(dstPtr, src1);
+				_mm256_store_ps(dstPtr + 8, src2);
+
+				src += NSize;
+				dstPtr += 16;
+			}
+		}
 	}
 
 	template<typename T>

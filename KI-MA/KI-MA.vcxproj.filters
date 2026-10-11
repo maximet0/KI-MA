@@ -99,6 +99,12 @@
     <ClCompile Include="src\AI\Math\Tensor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\AI\Math\TensorMath.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AI\Math\TensorMathMatMul.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Core\Application.h">
@@ -208,5 +214,10 @@
     <Image Include="C:\Users\maxim\Downloads\BOX-1.png.png">
       <Filter>Resource Files</Filter>
     </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="src\AI\Math\TensorMathMatMul_.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
   </ItemGroup>
 </Project>

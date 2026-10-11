@@ -45,81 +45,189 @@ namespace Core {
 		}
 	}
 
+	std::string formatTensor(AI::Tensor<float>& tensor) {
+		std::string result = "Tensor shape: [";
+		for (size_t i = 0; i < tensor.getShape().size(); ++i) {
+			result += std::to_string(tensor.getShape()[i]);
+			if (i < tensor.getShape().size() - 1) result += ", ";
+		}
+		result += "]\n";
+		result += "Values:\n";
+		for (size_t i = 0; i < tensor.getTotalSize(); ++i) {
+			result += std::to_string(tensor[i]) + " ";
+		}
+		result += "\n";
+		return result;
+	}
+
 	void Application::onStart() {
 		{
-			AI::Tensor<float> a({ 2, 2 });
-			a(0, 0) = 0.5f;
-			a(0, 1) = 1.0f;
-			a(1, 0) = 1.5f;
-			a(1, 1) = 2.0f;
+			// Einfaches XOR Model Test
+			// 3 Schichten: Input (2 Neuronen), Hidden (8 Neuronen), Output (1 Neuron)
+			AI::Tensor<float> inputWeights({ 2, 8 });
+			inputWeights = {
+				10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f,
+				10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f
+			};
 
-			Core::Logger::Debug("A Tensor (0, 0): {}", a(0, 0));
-			Core::Logger::Debug("A Tensor (0, 1): {}", a(0, 1));
-			Core::Logger::Debug("A Tensor (1, 0): {}", a(1, 0));
-			Core::Logger::Debug("A Tensor (1, 1): {}", a(1, 1));
+			AI::Tensor<float> inputBiases({ 8 });
+			inputBiases = { 0.0f, 0.0f, 0.0f, 0.0f, -10.0f, -10.0f, -10.0f, -10.0f };
+
+			AI::Tensor<float> hiddenWeights({ 8, 8 });
+			hiddenWeights = {
+				0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f,
+				0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f,
+				0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f,
+				0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f,
+				-0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f,
+				-0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f,
+				-0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f,
+				-0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f
+			};
 
 
-			AI::Tensor<float> b({ 2 });
-			b(0) = 2.0f;
-			b(1) = 3.0f;
+			AI::Tensor<float> hiddenBiases({ 8 });
+			hiddenBiases = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
-			AI::TensorView<float> viewB(b, 0, b.getTotalSize(), { 2 });
-			Core::Logger::Debug("B TensorView (0): {}", viewB(0));
-			Core::Logger::Debug("B TensorView (1): {}", viewB(1));
+			AI::Tensor<float> outputWeights({ 8, 1 });
+			outputWeights = { 0.17098493f, 0.17098493f, 0.17098493f, 0.17098493f, 0.17098493f, 0.17098493f, 0.17098493f, 0.17098493f };
 
-			auto result = a.view();
-			AI::Math::Add<float>(a.view(), b.view(), result);
+			AI::Tensor<float> outputBiases({ 1 });
+			outputBiases = { 0.0f };
 
-			Core::Logger::Debug("Add Tensor (0, 0): {}", result(0, 0));
-			Core::Logger::Debug("Add Tensor (0, 1): {}", result(0, 1));
-			Core::Logger::Debug("Add Tensor (1, 0): {}", result(1, 0));
-			Core::Logger::Debug("Add Tensor (1, 1): {}", result(1, 1));
+			AI::Tensor<float> modelInput({ 1, 2 });
+			modelInput = { 1.0f, 1.0f };
 
+
+			AI::Tensor<float> hiddenLayerInput({ 1, 8 });
+			AI::Tensor<float> outputLayerInput({ 1, 8 });
+			AI::Tensor<float> modelOutput({ 1, 1 });
+
+			AI::Math::MatMul(modelInput, inputWeights, hiddenLayerInput, AI::Math::CreateBroadcastPlan<float>({ modelInput.view(), inputWeights.view() }));
+			Core::Logger::Debug("Hidden Layer Input (after MatMul): {}", formatTensor(hiddenLayerInput));
+			auto hiddenView = hiddenLayerInput.view();
+			AI::Math::Add<float>(hiddenView, inputBiases.view(), hiddenView, AI::Math::CreateBroadcastPlan<float>({ hiddenView, inputBiases.view() }));
+			Core::Logger::Debug("Hidden Layer Input (after Add Biases): {}", formatTensor(hiddenLayerInput));
+			AI::Math::SiLU<float>(hiddenLayerInput, hiddenLayerInput);
+			Core::Logger::Debug("Hidden Layer Input (after SiLU): {}", formatTensor(hiddenLayerInput));
+
+			AI::Math::MatMul(hiddenLayerInput, hiddenWeights, outputLayerInput, AI::Math::CreateBroadcastPlan<float>({ hiddenLayerInput.view(), hiddenWeights.view() }));
+			Core::Logger::Debug("Output Layer Input (after MatMul): {}", formatTensor(outputLayerInput));
+			auto outputView = outputLayerInput.view();
+			AI::Math::Add<float>(outputView, hiddenBiases.view(), outputView, AI::Math::CreateBroadcastPlan<float>({ outputView, hiddenBiases.view() }));
+			Core::Logger::Debug("Output Layer Input (after Add Biases): {}", formatTensor(outputLayerInput));
+			AI::Math::SiLU<float>(outputLayerInput, outputLayerInput);
+			Core::Logger::Debug("Output Layer Input (after SiLU): {}", formatTensor(outputLayerInput));
+
+			AI::Math::MatMul(outputLayerInput, outputWeights, modelOutput, AI::Math::CreateBroadcastPlan<float>({ outputLayerInput.view(), outputWeights.view() }));
+			Core::Logger::Debug("Model Output (after MatMul): {}", formatTensor(modelOutput));
+			auto resultsView = modelOutput.view();
+			AI::Math::Add<float>(resultsView, outputBiases.view(), resultsView, AI::Math::CreateBroadcastPlan<float>({ resultsView, outputBiases.view() }));
+			Core::Logger::Debug("Model Output (after Add Biases): {}", formatTensor(modelOutput));
 		}
 
 		{
-			AI::Tensor<float> a({ 2, 3, 2 });
 
-			float value = 1.0f;
 
-			for (size_t i = 0; i < 2; i++)
+#include <chrono>
+
+			constexpr size_t M = 1;
+			constexpr size_t K = 4096;
+			constexpr size_t N = 4096;
+
+			AI::Tensor<float> a({ M, K });
+			AI::Tensor<float> b({ K, N });
+			AI::Tensor<float> resultTensor({ M, N });
+
+			for (size_t i = 0; i < M; ++i)
 			{
-				for (size_t j = 0; j < 3; j++)
+				for (size_t k = 0; k < K; ++k)
 				{
-					for (size_t k = 0; k < 2; k++)
-					{
-						a(i, j, k) = value++;
-					}
+					a(i, k) =
+						static_cast<float>((i + k) % 17) * 0.01f;
 				}
 			}
 
-			AI::Tensor<float> b({ 3, 1 });
-			b(0, 0) = 10.0f;
-			b(1, 0) = 20.0f;
-			b(2, 0) = 30.0f;
-
-			AI::Tensor<float> resultTensor({ 2, 3, 2 });
-			auto result = resultTensor.view();
-
-			AI::Math::Add<float>(a.view(), b.view(), result);
-
-			for (size_t i = 0; i < 2; i++)
+			for (size_t k = 0; k < K; ++k)
 			{
-				for (size_t j = 0; j < 3; j++)
+				for (size_t j = 0; j < N; ++j)
 				{
-					for (size_t k = 0; k < 2; k++)
-					{
-						Core::Logger::Debug(
-							"3D Result ({}, {}, {}): {}",
-							i, j, k,
-							result(i, j, k)
-						);
-					}
+					b(k, j) =
+						static_cast<float>((k + j) % 13) * 0.01f;
 				}
 			}
 
+			auto plan = AI::Math::CreateBroadcastPlan<float>({
+				a.view(),
+				b.view()
+				});
+
+			assert(plan.matMulValid);
+
+			constexpr size_t warmupIterations = 1;
+			constexpr size_t iterations = 3;
+
+			for (size_t i = 0; i < warmupIterations; ++i)
+			{
+				AI::Math::MatMul(
+					a,
+					b,
+					resultTensor,
+					plan
+				);
+			}
+
+			auto start = std::chrono::steady_clock::now();
+
+			for (size_t i = 0; i < iterations; ++i)
+			{
+				AI::Math::MatMul(
+					a,
+					b,
+					resultTensor,
+					plan
+				);
+			}
+
+			auto end = std::chrono::steady_clock::now();
+
+			const double totalMs =
+				std::chrono::duration<double, std::milli>(
+					end - start
+				).count();
+
+			const double averageMs =
+				totalMs / static_cast<double>(iterations);
+
+			const double flops =
+				2.0 *
+				static_cast<double>(M) *
+				static_cast<double>(N) *
+				static_cast<double>(K);
+
+			const double gflops =
+				flops / (averageMs / 1000.0) / 1e9;
+
+			Core::Logger::Debug(
+				"MatMul {}x{} @ {}x{}",
+				M, K,
+				K, N
+			);
+
+			Core::Logger::Debug(
+				"Average: {} ms | {} GFLOP/s",
+				averageMs,
+				gflops
+			);
+
+			Core::Logger::Debug(
+				"Result samples: {}, {}, {}",
+				resultTensor(0, 0),
+				resultTensor(M / 2, N / 2),
+				resultTensor(M - 1, N - 1)
+			);
 		}
-
+		
 		//Erstellt das Fenster, den Grafik-Kontext, die Swapchain und den Renderer.
 		m_EventSystem = new Events::EventSystem();
 		m_Window = new Window(L"Application");

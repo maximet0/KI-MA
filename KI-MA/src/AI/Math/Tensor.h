@@ -1,6 +1,8 @@
 #pragma once
 #include <vector>
 
+#include "Core/Logger.h"
+
 namespace AI {
 
 	template<typename T>
@@ -40,11 +42,24 @@ namespace AI {
 			return m_DataPtr[index];
 		}
 
+		Tensor& operator=(std::initializer_list<T> values) {
+			if (values.size() != m_TotalSize)
+				Core::Logger::Fatal("Initializer list size does not match tensor size.");
+
+			std::copy(values.begin(), values.end(), m_DataPtr);
+			return *this;
+		}
+
+		void genPackedData(uint32_t NSize, uint32_t KSize);
+
+		T* getDataPtr() { return m_DataPtr; }
+		T* getCachedPackedDataPtr() { return m_CachedPackedDataPtr; }
+			
 		const T* getDataPtr() const { return m_DataPtr; }
+		const T* getCachedPackedDataPtr() const { return m_CachedPackedDataPtr; }
 
 		const std::vector<size_t>& getShape() const { return m_Shape; }
 		const std::vector<size_t>& getStrides() const { return m_Strides; }
-
 	private:
 		void setShape(const std::vector<size_t>& shape);
 
@@ -66,6 +81,8 @@ namespace AI {
 
 		std::vector<size_t> m_Shape;
 		std::vector<size_t> m_Strides;
+
+		T* m_CachedPackedDataPtr;
 	};
 
 	template<typename T>
@@ -102,6 +119,7 @@ namespace AI {
 		const std::vector<size_t>& getStrides() const { return m_ViewStrides; }
 
 		const T* getDataPtr() const { return m_BaseTensor->getDataPtr() + m_Offset; }
+		T* getDataPtr() { return m_BaseTensor->getDataPtr() + m_Offset; }
 
 	private:
 		// Berechnet den index für den dimensionalen Zugriff
