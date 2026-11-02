@@ -6,10 +6,13 @@
 
 #include "Game/GameEditor.h"
 
+#include "AI/ModelEditor.h"
+
 namespace Core {
 
 	enum ApplcationMode {
 		Editor,
+		ModelEditor,
 		Game
 	};
 
@@ -94,10 +97,12 @@ namespace Core {
 
 		static Application* s_Application;
 
-		ApplcationMode m_Mode = ApplcationMode::Editor;
+		ApplcationMode m_Mode = ApplcationMode::ModelEditor;
 
 		Game::GameEditor* m_GameEditor;
 		Game::GameInstance* m_GameInstance;
+
+		AI::ModelEditor* m_ModelEditor;
 
 		//Game::GameInstance* m_GameInstance;
 

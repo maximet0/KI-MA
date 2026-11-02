@@ -96,13 +96,34 @@
     <ClCompile Include="src\Game\GameEditor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\AI\Math\Tensor.cpp">
+    <ClCompile Include="src\AI\Tensor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\AI\Math\TensorMath.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\AI\Math\TensorMathMatMul.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AI\Model.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AI\Math\OptimizerMath.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AI\ModelEditor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AI\DataSet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AI\Math\GPUTensorMath.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AI\GPU\ComputePipeline.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AI\GPU\ComputeContext.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -197,10 +218,31 @@
     <ClInclude Include="src\Graphics\BufferManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\AI\Math\Tensor.h">
+    <ClInclude Include="src\AI\Tensor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\AI\Math\TensorMath.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\AI\Model.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\AI\Math\OptimizerMath.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\AI\ModelEditor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\AI\DataSet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\AI\Math\GPUTensorMath.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\AI\GPU\ComputePipeline.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\AI\GPU\ComputeContext.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -209,6 +251,33 @@
     <FxCompile Include="res\Shaders\PixelShader.hlsl" />
     <FxCompile Include="res\Shaders\LineVertexShader.hlsl" />
     <FxCompile Include="res\Shaders\LinePixelShader.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorAddSeq.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorMulSeq.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorSubSeq.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorDivSeq.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorMulAddSeq.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\GPUTensorMatMul.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Scalar\GPUTensorAddScal.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Scalar\GPUTensorDivScal.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Scalar\GPUTensorMulAddScal.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Scalar\GPUTensorMulScal.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Scalar\GPUTensorSubScal.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorSiLU.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorReLU.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Broadcast\GPUTensorAddBroadcast.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Broadcast\GPUTensorDivBroadcast.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Broadcast\GPUTensorMulAddBroadcast.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Broadcast\GPUTensorMulBroadcast.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Broadcast\GPUTensorSubBroadcast.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\GPUTensorMatMulNaive.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorSoftmax.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\GPUTensorTranspose.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorSiLUGrad.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorReLUGrad.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Sequential\GPUTensorCELossGrad.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Optimizers\GPUTensorAdamW.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\Optimizers\GPUTensorSGD.hlsl" />
+    <FxCompile Include="res\Shaders\Compute\GPUTensorGenBiasGrad.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="C:\Users\maxim\Downloads\BOX-1.png.png">

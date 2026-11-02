@@ -66,7 +66,6 @@ namespace Graphics {
 		D3D12_CPU_DESCRIPTOR_HANDLE getNextDSVDescriptorHandle(uint32_t& index);
 
 
-
 		void transition(ID3D12Resource* res, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 		ID3D12GraphicsCommandList*& getCmdList() { return m_CmdList; }
 

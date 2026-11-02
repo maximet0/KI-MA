@@ -225,7 +225,7 @@ namespace Game {
 			renderer->submitLine({ posX + sizeX, posY + sizeY }, { posX, posY + sizeY }, 0xFFFFFFFF);
 			renderer->submitLine({ posX, posY + sizeY }, { posX, posY }, 0xFFFFFFFF);
 
-			float handleSize = (std::min)(8.0f, 8.0f * m_GameInstance.m_CameraZoom);
+			float handleSize = std::min(8.0f, 8.0f * m_GameInstance.m_CameraZoom);
 			renderer->submitRect({ posX - handleSize * 0.5f, posY + sizeY * 0.5f - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);
 			renderer->submitRect({ posX + sizeX * 0.5f - handleSize * 0.5f, posY - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);
 			renderer->submitRect({ posX + sizeX - handleSize * 0.5f, posY + sizeY * 0.5f - handleSize * 0.5f }, 1.0f, { handleSize, handleSize }, renderer->getTextureManager().getTextureIDFromSet(m_EditorTextureSetID, "WHITE"), false);

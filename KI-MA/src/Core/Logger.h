@@ -111,12 +111,12 @@ namespace Core {
 		template<typename... Args>
 		static void Debug(std::format_string<Args...> fmt, Args&&... args) {
 #ifdef DEBUG
-			char msg[4096];
+			char msg[4096*16];
 			auto result = std::format_to_n(msg, sizeof(msg) - 1, fmt, std::forward<Args>(args)...);
 			msg[result.out - msg] = '\0';
 			char time[16];
 			getTime(time, sizeof(time));
-			char buf[4096];
+			char buf[4096*16];
 			result = std::format_to_n(buf, sizeof(buf) - 1, "\033[90m{} [DEBUG] {}\n", time, msg);
 			WriteToConsole(buf, result.out - buf);
 #endif

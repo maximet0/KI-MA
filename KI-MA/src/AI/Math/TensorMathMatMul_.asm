@@ -165,6 +165,7 @@ Kernel1x64_F32 PROC FRAME
 	.pushreg r13
 
 	sub rsp, 96	; Sicherungsbereich für XMM6-XMM11 (6 Register * 16 Bytes = 96 Bytes) auf dem Stack reservieren
+	.allocstack 96
 	vmovdqu xmmword ptr [rsp + 0], xmm6
 	.savexmm128 xmm6, 0
 	vmovdqu xmmword ptr [rsp + 16], xmm7

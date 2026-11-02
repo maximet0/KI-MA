@@ -10,9 +10,16 @@
 #include "Events/Callbacks.h"
 #include "Logger.h"
 #include <thread>
+#include <random>
+#include <numeric>
 
-#include "AI/Math/Tensor.h"
+#include "AI/Model.h"
+#include "AI/Tensor.h"
 #include "AI/Math/TensorMath.h"
+#include "AI/Math/GPUTensorMath.h"
+
+
+
 
 namespace Core {
 	Application* Application::s_Application = nullptr;
@@ -60,173 +67,237 @@ namespace Core {
 		return result;
 	}
 
+	uint32_t swapEndianess(uint32_t value) {
+		return ((value >> 24) & 0x000000FF) |
+			((value >> 8) & 0x0000FF00) |
+			((value << 8) & 0x00FF0000) |
+			((value << 24) & 0xFF000000);
+	}
+
 	void Application::onStart() {
+		
+
+		//Transpose Performance Test
 		{
-			// Einfaches XOR Model Test
-			// 3 Schichten: Input (2 Neuronen), Hidden (8 Neuronen), Output (1 Neuron)
-			AI::Tensor<float> inputWeights({ 2, 8 });
-			inputWeights = {
-				10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f,
-				10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f, 10.0f
-			};
+			
+			AI::Tensor<float> testTensor({ 4096, 4096 });
+			std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now();
+			for (size_t i = 0; i < 10; ++i) {
+				AI::Math::Transpose(testTensor, testTensor);
+			}
+			Core::Logger::Debug("Transpose Time elapsed: {} seconds", std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count());
 
-			AI::Tensor<float> inputBiases({ 8 });
-			inputBiases = { 0.0f, 0.0f, 0.0f, 0.0f, -10.0f, -10.0f, -10.0f, -10.0f };
-
-			AI::Tensor<float> hiddenWeights({ 8, 8 });
-			hiddenWeights = {
-				0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f,
-				0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f,
-				0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f,
-				0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f, 0.025f,
-				-0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f,
-				-0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f,
-				-0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f,
-				-0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f, -0.050f
-			};
-
-
-			AI::Tensor<float> hiddenBiases({ 8 });
-			hiddenBiases = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-			AI::Tensor<float> outputWeights({ 8, 1 });
-			outputWeights = { 0.17098493f, 0.17098493f, 0.17098493f, 0.17098493f, 0.17098493f, 0.17098493f, 0.17098493f, 0.17098493f };
-
-			AI::Tensor<float> outputBiases({ 1 });
-			outputBiases = { 0.0f };
-
-			AI::Tensor<float> modelInput({ 1, 2 });
-			modelInput = { 1.0f, 1.0f };
-
-
-			AI::Tensor<float> hiddenLayerInput({ 1, 8 });
-			AI::Tensor<float> outputLayerInput({ 1, 8 });
-			AI::Tensor<float> modelOutput({ 1, 1 });
-
-			AI::Math::MatMul(modelInput, inputWeights, hiddenLayerInput, AI::Math::CreateBroadcastPlan<float>({ modelInput.view(), inputWeights.view() }));
-			Core::Logger::Debug("Hidden Layer Input (after MatMul): {}", formatTensor(hiddenLayerInput));
-			auto hiddenView = hiddenLayerInput.view();
-			AI::Math::Add<float>(hiddenView, inputBiases.view(), hiddenView, AI::Math::CreateBroadcastPlan<float>({ hiddenView, inputBiases.view() }));
-			Core::Logger::Debug("Hidden Layer Input (after Add Biases): {}", formatTensor(hiddenLayerInput));
-			AI::Math::SiLU<float>(hiddenLayerInput, hiddenLayerInput);
-			Core::Logger::Debug("Hidden Layer Input (after SiLU): {}", formatTensor(hiddenLayerInput));
-
-			AI::Math::MatMul(hiddenLayerInput, hiddenWeights, outputLayerInput, AI::Math::CreateBroadcastPlan<float>({ hiddenLayerInput.view(), hiddenWeights.view() }));
-			Core::Logger::Debug("Output Layer Input (after MatMul): {}", formatTensor(outputLayerInput));
-			auto outputView = outputLayerInput.view();
-			AI::Math::Add<float>(outputView, hiddenBiases.view(), outputView, AI::Math::CreateBroadcastPlan<float>({ outputView, hiddenBiases.view() }));
-			Core::Logger::Debug("Output Layer Input (after Add Biases): {}", formatTensor(outputLayerInput));
-			AI::Math::SiLU<float>(outputLayerInput, outputLayerInput);
-			Core::Logger::Debug("Output Layer Input (after SiLU): {}", formatTensor(outputLayerInput));
-
-			AI::Math::MatMul(outputLayerInput, outputWeights, modelOutput, AI::Math::CreateBroadcastPlan<float>({ outputLayerInput.view(), outputWeights.view() }));
-			Core::Logger::Debug("Model Output (after MatMul): {}", formatTensor(modelOutput));
-			auto resultsView = modelOutput.view();
-			AI::Math::Add<float>(resultsView, outputBiases.view(), resultsView, AI::Math::CreateBroadcastPlan<float>({ resultsView, outputBiases.view() }));
-			Core::Logger::Debug("Model Output (after Add Biases): {}", formatTensor(modelOutput));
 		}
 
-		{
+		// MNIST Model Test
+		/* {
+			// Load images and labels from MNIST dataset
+			std::ifstream mnistImages("C:\\Users\\maxim\\Downloads\\train-images-idx3-ubyte\\train-images.idx3-ubyte", std::ios::in | std::ios::binary);
+
+			// Big-endian
+			struct imgHDR {
+				uint32_t magic;
+				uint32_t imageCount;
+				uint32_t rows;
+				uint32_t cols;
+			} header;
+
+			mnistImages.read(reinterpret_cast<char*>(&header), sizeof(header));
+
+			header.magic = swapEndianess(header.magic);
+			header.imageCount = swapEndianess(header.imageCount);
+			header.rows = swapEndianess(header.rows);
+			header.cols = swapEndianess(header.cols);
+
+			AI::Tensor<float> mnistImageData({ header.imageCount, header.rows * header.cols });
+
+			char* rawImageData = new char[header.imageCount * header.rows * header.cols];
+			mnistImages.read(reinterpret_cast<char*>(rawImageData), header.imageCount* header.rows* header.cols);
+			for (size_t i = 0; i < header.imageCount * header.rows * header.cols; ++i) {
+				mnistImageData[i] = static_cast<float>(static_cast<unsigned char>(rawImageData[i])) / 255.0f;
+			}
+			delete[] rawImageData;
+			mnistImages.close();
+
+			Core::Logger::Success("MNIST Image Header: Magic: {}, Image Count: {}, Rows: {}, Cols: {}", header.magic, header.imageCount, header.rows, header.cols);
+
+			std::ifstream mnistLabels("C:\\Users\\maxim\\Downloads\\train-labels-idx1-ubyte\\train-labels.idx1-ubyte", std::ios::in | std::ios::binary);
+
+			struct lblHDR {
+				uint32_t magic;
+				uint32_t labelCount;
+			} labelHeader;
+
+			mnistLabels.read(reinterpret_cast<char*>(&labelHeader), sizeof(labelHeader));
+
+			labelHeader.magic = swapEndianess(labelHeader.magic);
+			labelHeader.labelCount = swapEndianess(labelHeader.labelCount);
+
+			char* imgLabels = new char[labelHeader.labelCount];
+			mnistLabels.read(imgLabels, labelHeader.labelCount);
+			mnistLabels.close();
+
+			Core::Logger::Success("MNIST Label Header: Magic: {}, Label Count: {}", labelHeader.magic, labelHeader.labelCount);
+
+			AI::Model mnistModel;
+			mnistModel.addLayer(AI::LayerType::Input, AI::ActivationFunction::None, 784);
+			mnistModel.addLayer(AI::LayerType::Dense, AI::ActivationFunction::ReLU, 800);
+			//mnistModel.addLayer(AI::LayerType::Dense, AI::ActivationFunction::ReLU, 256);
+			mnistModel.addLayer(AI::LayerType::Output, AI::ActivationFunction::Softmax, 10);
+			mnistModel.buildModel(60);
+
+			mnistModel.initializeParameters();
+			AI::Math::AdamOptimizerParams adamParams;
+			adamParams = { 0.001f, 0.9f, 0.999f, 1e-8f, 0.01f };
+
+			mnistModel.setOptimizer(adamParams);
+
+			std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now();
+			mnistModel.beginTraining();
+
+			std::mt19937 rng(std::random_device{}());
+			std::uniform_int_distribution<int> shiftDistr(-4, 4);
+
+			const size_t rows = header.rows;
+			const size_t cols = header.cols;
+			const size_t pixels = rows * cols;
+
+			AI::Tensor<float> shiftedImages({ 60, pixels });	
+			std::fill_n(shiftedImages.getDataPtr(), 60 * pixels, 0.0f);
 
 
-#include <chrono>
+			for (size_t epoch = 0; epoch < 5; ++epoch) {
+				float combinedLossforEpoch = 0.0f;
 
-			constexpr size_t M = 1;
-			constexpr size_t K = 4096;
-			constexpr size_t N = 4096;
+				size_t correctCount = 0;
+				for (size_t i = 0; i < labelHeader.labelCount; i += 60) {
 
-			AI::Tensor<float> a({ M, K });
-			AI::Tensor<float> b({ K, N });
-			AI::Tensor<float> resultTensor({ M, N });
+					AI::Tensor<float> inputImage = mnistImageData.view({ 60, header.rows * header.cols }, i, 0).viewCopy();
 
-			for (size_t i = 0; i < M; ++i)
-			{
-				for (size_t k = 0; k < K; ++k)
-				{
-					a(i, k) =
-						static_cast<float>((i + k) % 17) * 0.01f;
+					std::fill_n(shiftedImages.getDataPtr(), 60 * pixels, 0.0f);
+
+					for (size_t j = 0; j < 60; ++j) {
+						const int dx = shiftDistr(rng);
+						const int dy = shiftDistr(rng);
+
+						const float* source = inputImage.getDataPtr() + j * pixels;
+						float* destination = shiftedImages.getDataPtr() + j * pixels;
+
+						for (size_t y = 0; y < rows; ++y) {
+							const int sourceY = static_cast<int>(y) - dy;
+
+							if (sourceY < 0 || sourceY >= static_cast<int>(rows))
+								continue;
+
+							for (size_t x = 0; x < cols; ++x) {
+								const int sourceX = static_cast<int>(x) - dx;
+
+								if (sourceX < 0 || sourceX >= static_cast<int>(cols))
+									continue;
+
+								destination[y * cols + x] =
+									source[static_cast<size_t>(sourceY) * cols
+									+ static_cast<size_t>(sourceX)];
+							}
+						}
+					}
+
+					// Copy back into this batch's independent image buffer.
+					inputImage.clearCachedData();
+					inputImage = shiftedImages;
+
+					AI::Tensor<float> targetOutput({ 60, 10 });
+					memset(targetOutput.getDataPtr(), 0, sizeof(float) * 60 * 10);
+					for (size_t j = 0; j < 60; ++j) {
+						targetOutput(j, imgLabels[i + j]) = 1.0f;
+					}
+					AI::Tensor<float> modelOutput({ 60, 10 });
+					mnistModel.forward(inputImage, modelOutput);
+					for (size_t j = 0; j < 60; ++j) {
+						size_t predictedLabel = std::distance(modelOutput.getDataPtr() + j * 10, std::max_element(modelOutput.getDataPtr() + j * 10, modelOutput.getDataPtr() + (j + 1) * 10));
+						if (predictedLabel == static_cast<size_t>(imgLabels[i + j])) {
+							correctCount++;
+						}
+					}
+
+					mnistModel.trainSupervised(targetOutput);
+					combinedLossforEpoch += mnistModel.getCurrentLoss();
+				}
+				Core::Logger::Debug("Epoch {}: Average Loss: {}", epoch, combinedLossforEpoch / static_cast<float>(labelHeader.labelCount / 60));
+				Core::Logger::Debug("Current Accuracy: {}%", (static_cast<float>(correctCount) / static_cast<float>(labelHeader.labelCount)) * 100.0f);
+				correctCount = 0;
+				Core::Logger::Debug("Time elapsed: {} seconds", std::chrono::duration<double>(std::chrono::steady_clock::now() - startTime).count());
+			}
+			mnistModel.endTraining();
+
+			delete[] imgLabels;
+			
+			//mnistModel.buildModel(1); // Rebuild the model for inference with batch size 1
+
+			// Check Test Images
+			std::ifstream mnistTestImages("C:\\Users\\maxim\\Downloads\\t10k-images-idx3-ubyte\\t10k-images.idx3-ubyte", std::ios::in | std::ios::binary);
+
+
+			mnistTestImages.read(reinterpret_cast<char*>(&header), sizeof(header));
+
+			header.magic = swapEndianess(header.magic);
+			header.imageCount = swapEndianess(header.imageCount);
+			header.rows = swapEndianess(header.rows);
+			header.cols = swapEndianess(header.cols);
+
+			AI::Tensor<float> mnistImageTestData({ header.imageCount, header.rows * header.cols });
+
+			rawImageData = new char[header.imageCount * header.rows * header.cols];
+			mnistTestImages.read(reinterpret_cast<char*>(rawImageData), header.imageCount* header.rows* header.cols);
+			for (size_t i = 0; i < header.imageCount * header.rows * header.cols; ++i) {
+				mnistImageTestData[i] = static_cast<float>(static_cast<unsigned char>(rawImageData[i])) / 255.0f;
+			}
+			delete[] rawImageData;
+			mnistTestImages.close();
+
+			Core::Logger::Success("MNIST Image Header: Magic: {}, Image Count: {}, Rows: {}, Cols: {}", header.magic, header.imageCount, header.rows, header.cols);
+
+			std::ifstream mnistTestLabels("C:\\Users\\maxim\\Downloads\\t10k-labels-idx1-ubyte\\t10k-labels.idx1-ubyte", std::ios::in | std::ios::binary);
+
+			mnistTestLabels.read(reinterpret_cast<char*>(&labelHeader), sizeof(labelHeader));
+
+			labelHeader.magic = swapEndianess(labelHeader.magic);
+			labelHeader.labelCount = swapEndianess(labelHeader.labelCount);
+
+			imgLabels = new char[labelHeader.labelCount];
+			mnistTestLabels.read(imgLabels, labelHeader.labelCount);
+			mnistTestLabels.close();
+
+			float avgLoss = 0.0f;
+			size_t correctCount = 0;
+			size_t randomCorrectCount = 0;
+
+			for (size_t i = 0; i + 60 <= labelHeader.labelCount; i += 60) {
+				AI::Tensor<float> inputImage = mnistImageTestData.view({ 60, header.rows * header.cols }, i, 0).viewCopy();
+				AI::Tensor<float> modelOutput({ 60, 10 });
+				mnistModel.forward(inputImage, modelOutput);
+				avgLoss += mnistModel.getCurrentLoss();
+				for (size_t j = 0; j < 60; ++j) {
+					size_t predictedLabel = std::distance(modelOutput.getDataPtr() + j * 10, std::max_element(modelOutput.getDataPtr() + j * 10, modelOutput.getDataPtr() + (j + 1) * 10));
+					if (predictedLabel == static_cast<size_t>(imgLabels[i + j])) {
+						++correctCount;
+					}
+
+					if (rand() % 10 == static_cast<size_t>(imgLabels[i + j])) {
+						++randomCorrectCount;
+					}
 				}
 			}
 
-			for (size_t k = 0; k < K; ++k)
-			{
-				for (size_t j = 0; j < N; ++j)
-				{
-					b(k, j) =
-						static_cast<float>((k + j) % 13) * 0.01f;
-				}
-			}
+			mnistModel.saveModel("models/mnist.modl");
 
-			auto plan = AI::Math::CreateBroadcastPlan<float>({
-				a.view(),
-				b.view()
-				});
 
-			assert(plan.matMulValid);
+			Core::Logger::Debug("MNIST Test Accuracy: {}%", (static_cast<float>(correctCount) / static_cast<float>(labelHeader.labelCount)) * 100.0f);
+			Core::Logger::Debug("MNIST Test Random Accuracy: {}%", (static_cast<float>(randomCorrectCount) / static_cast<float>(labelHeader.labelCount)) * 100.0f);
+			Core::Logger::Debug("MNIST Test Average Loss: {}", avgLoss / static_cast<float>(labelHeader.labelCount));
+			delete[] imgLabels;
+		}*/
 
-			constexpr size_t warmupIterations = 1;
-			constexpr size_t iterations = 3;
-
-			for (size_t i = 0; i < warmupIterations; ++i)
-			{
-				AI::Math::MatMul(
-					a,
-					b,
-					resultTensor,
-					plan
-				);
-			}
-
-			auto start = std::chrono::steady_clock::now();
-
-			for (size_t i = 0; i < iterations; ++i)
-			{
-				AI::Math::MatMul(
-					a,
-					b,
-					resultTensor,
-					plan
-				);
-			}
-
-			auto end = std::chrono::steady_clock::now();
-
-			const double totalMs =
-				std::chrono::duration<double, std::milli>(
-					end - start
-				).count();
-
-			const double averageMs =
-				totalMs / static_cast<double>(iterations);
-
-			const double flops =
-				2.0 *
-				static_cast<double>(M) *
-				static_cast<double>(N) *
-				static_cast<double>(K);
-
-			const double gflops =
-				flops / (averageMs / 1000.0) / 1e9;
-
-			Core::Logger::Debug(
-				"MatMul {}x{} @ {}x{}",
-				M, K,
-				K, N
-			);
-
-			Core::Logger::Debug(
-				"Average: {} ms | {} GFLOP/s",
-				averageMs,
-				gflops
-			);
-
-			Core::Logger::Debug(
-				"Result samples: {}, {}, {}",
-				resultTensor(0, 0),
-				resultTensor(M / 2, N / 2),
-				resultTensor(M - 1, N - 1)
-			);
-		}
 		
 		//Erstellt das Fenster, den Grafik-Kontext, die Swapchain und den Renderer.
 		m_EventSystem = new Events::EventSystem();
@@ -248,7 +319,6 @@ namespace Core {
 		m_GameEditor = new Game::GameEditor();
 		m_GameInstance = new Game::GameInstance(settings);
 
-
 		if (!std::filesystem::exists("TextureSets")) {
 			std::filesystem::create_directory("TextureSets");
 		}
@@ -261,7 +331,22 @@ namespace Core {
 		}
 		m_Renderer->getTextureManager().endEarlyTextureLoad();
 
+		AI::Math::GPUInit();
+
+		
+
+		AI::Math::beginGPUMath();
+
+
+
+		m_ModelEditor = new AI::ModelEditor();
+
+		AI::Math::endGPUMath();
+
+
 	}
+
+	
 
 	constexpr float TS = 1.0f / 60.0f;
 
@@ -289,6 +374,7 @@ namespace Core {
 
 			auto start = std::chrono::high_resolution_clock::now();
 			if (m_Mode == ApplcationMode::Editor) m_GameEditor->update(TS);
+			else if(m_Mode == ApplcationMode::ModelEditor) m_ModelEditor->render();
 			else if(m_Mode == ApplcationMode::Game) m_GameInstance->update(TS);
 			auto timeInMS = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count();
 
@@ -299,6 +385,7 @@ namespace Core {
 			m_Renderer->beginFrame();
 
 			if (m_Mode == ApplcationMode::Editor) m_GameEditor->render();
+			else if (m_Mode == ApplcationMode::ModelEditor) m_ModelEditor->update(TS);
 			else if (m_Mode == ApplcationMode::Game) {
 				m_Renderer->beginRenderTarget(m_GameInstance->getTarget(), m_GameInstance->m_CameraPosition, 1.0f / m_GameInstance->m_CameraZoom);
 
@@ -325,6 +412,7 @@ namespace Core {
 			ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_AutoHideTabBar);
 
 			if (m_Mode == ApplcationMode::Editor) m_GameEditor->drawGUI();
+			else if(m_Mode == ApplcationMode::ModelEditor) m_ModelEditor->drawGUI();
 			else if(m_Mode == ApplcationMode::Game) {
 				ImGuiIO& io = ImGui::GetIO();
 
@@ -376,6 +464,9 @@ namespace Core {
 					if (ImGui::BeginMenu("Application Mode")) {
 						if (ImGui::MenuItem("Editor", nullptr, m_Mode == ApplcationMode::Editor)) {
 							m_Mode = ApplcationMode::Editor;
+						}
+						if (ImGui::MenuItem("Model Editor", nullptr, m_Mode == ApplcationMode::ModelEditor)) {
+							m_Mode = ApplcationMode::ModelEditor;
 						}
 						if (ImGui::MenuItem("Game", nullptr, m_Mode == ApplcationMode::Game)) {
 							m_Mode = ApplcationMode::Game;

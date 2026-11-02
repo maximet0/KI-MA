@@ -35,8 +35,6 @@ namespace Graphics {
 			IID_PPV_ARGS(&m_UploadBuf.buffer)
 		);
 
-
-
 		m_UploadBuf.buffer->Map(0, nullptr, reinterpret_cast<void**>(&m_UploadBuf.mappedData));
 		m_UploadBuf.size = defaultCopyHeapSize;
 
@@ -74,11 +72,6 @@ namespace Graphics {
 	BufferHandle BufferManager::createBuffer(bool transient, size_t size)
 	{
 		auto device = Core::Application::getApplication()->getGraphicsContext()->getDevice();
-		BufferHandle handle = 0;
-
-		AllocationInfo info;
-		info.size = size;
-		info.state = D3D12_RESOURCE_STATE_COMMON;
 
 		D3D12_RESOURCE_DESC resourceDesc = {};
 		resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -88,95 +81,79 @@ namespace Graphics {
 		resourceDesc.MipLevels = 1;
 		resourceDesc.SampleDesc = { 1, 0 };
 		resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+		resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 		
 
-		auto allocInfo = device->GetResourceAllocationInfo(0, 1, &resourceDesc);
+		auto alloc = device->GetResourceAllocationInfo(0, 1, &resourceDesc);
 
-		if (allocInfo.SizeInBytes > heapChunkSize) {
-			info.heapIndex = allocateHeapChunk(allocInfo.SizeInBytes, transient);
-			info.offset = 0;
-			device->CreatePlacedResource(m_Heaps[info.heapIndex].heap.Get(), info.offset, &resourceDesc, info.state, nullptr, IID_PPV_ARGS(&info.buffer));
+		AllocationInfo info;
+		info.size = size;
+		info.allocationSize = alloc.SizeInBytes;
+		info.state = D3D12_RESOURCE_STATE_COMMON;
 
-			handle = transient ? m_TransientBufferHandleCounter++ : m_BufferHandleCounter++;
-			BufferHandle rawHandle = handle - TRANSIENT_HANDLE_MASK;
-			auto& buffers = transient ? m_TransientBuffers : m_Buffers;
-			if (buffers.size() < rawHandle) buffers.resize(rawHandle);
-			buffers[rawHandle - 1] = info;
-		}
-		else {
-			bool foundFreeSpace = false;
+		bool found = false;
 
+		if (alloc.SizeInBytes <= heapChunkSize) {
 			if (transient) {
 				for (auto& chunk : m_Heaps) {
-					uint64_t offset = alignUp(chunk.transientOffset, allocInfo.Alignment);
+					if (!chunk.transient) continue;
 
-					if (chunk.transient && chunk.size - offset >= allocInfo.SizeInBytes) {
-						info.heapIndex = &chunk - m_Heaps.data();
-						info.offset = offset;
-						chunk.transientOffset = offset + allocInfo.SizeInBytes;
-						foundFreeSpace = true;
-						break;
-					}
+					uint64_t offset = alignUp(chunk.transientOffset, alloc.Alignment);
+					if (alloc.SizeInBytes > chunk.size - offset) continue;
+
+					info.heapIndex = &chunk - m_Heaps.data();
+					info.offset = offset;
+					chunk.transientOffset = offset + alloc.SizeInBytes;
+					found = true;
+					break;
 				}
-
-				if (!foundFreeSpace) {
-					info.heapIndex = allocateHeapChunk(heapChunkSize, transient);
-					info.offset = 0;
-				}
-
-				device->CreatePlacedResource(m_Heaps[info.heapIndex].heap.Get(), info.offset, &resourceDesc, info.state, nullptr, IID_PPV_ARGS(&info.buffer));
-
-				handle = m_TransientBufferHandleCounter++;
-				BufferHandle rawHandle = handle - TRANSIENT_HANDLE_MASK;
-				if (m_TransientBuffers.size() < rawHandle) m_TransientBuffers.resize(rawHandle);
-				m_TransientBuffers[rawHandle - 1] = info;
 			}
 			else {
-
 				for (auto it = m_FreeList.begin(); it != m_FreeList.end(); ++it) {
 					FreeListEntry& freeListEntry = *it;
+					uint64_t offset = alignUp(freeListEntry.offset, alloc.Alignment);
+					uint64_t padding = offset - freeListEntry.offset;
 
-					uint64_t offset = alignUp(freeListEntry.offset, allocInfo.Alignment);
+					if (padding + alloc.SizeInBytes > freeListEntry.size) continue;
 
-					if (freeListEntry.size >= allocInfo.SizeInBytes) {
-						info.heapIndex = freeListEntry.heapIndex;
-						info.offset = offset;
+					info.heapIndex = freeListEntry.heapIndex;
+					info.offset = offset;
 
-						freeListEntry.offset = offset + allocInfo.SizeInBytes;
-						freeListEntry.size = freeListEntry.size - allocInfo.SizeInBytes;
-						foundFreeSpace = true;
-						if (freeListEntry.size == 0) it = m_FreeList.erase(it);
-						break;
-					}
+					freeListEntry.offset = offset + alloc.SizeInBytes;
+					freeListEntry.size -= padding + alloc.SizeInBytes;
+					if (freeListEntry.size == 0) it = m_FreeList.erase(it);
+					found = true;
+					break;
 				}
-
-				if (!foundFreeSpace) {
-					info.heapIndex = allocateHeapChunk(heapChunkSize, transient);
-					info.offset = 0;
-
-					FreeListEntry freeEntry;
-					freeEntry.heapIndex = info.heapIndex;
-					freeEntry.offset = allocInfo.SizeInBytes;
-					freeEntry.size = heapChunkSize - allocInfo.SizeInBytes;
-					m_FreeList.push_back(freeEntry);
-				}
-
-				if (m_FreeHandles.size()) {
-					handle = m_FreeHandles.back();
-					m_FreeHandles.pop_back();
-
-				}
-				else {
-					handle = ++m_BufferHandleCounter;
-				}
-
-				device->CreatePlacedResource(m_Heaps[info.heapIndex].heap.Get(), info.offset, &resourceDesc, info.state, nullptr, IID_PPV_ARGS(&info.buffer));
-
-				if (m_Buffers.size() < handle) m_Buffers.resize(handle);
-				m_Buffers[handle - 1] = info;
 			}
-
 		}
+
+		if (!found) {
+			uint64_t chunkSize = std::max(heapChunkSize, alloc.SizeInBytes);
+			info.heapIndex = allocateHeapChunk(chunkSize, transient);
+			info.offset = 0;
+
+			if (transient) m_Heaps[info.heapIndex].transientOffset = alloc.SizeInBytes;
+			else if (chunkSize > alloc.SizeInBytes) m_FreeList.push_back({ info.heapIndex, alloc.SizeInBytes, chunkSize - alloc.SizeInBytes });
+		}
+
+
+		device->CreatePlacedResource(m_Heaps[info.heapIndex].heap.Get(), info.offset, &resourceDesc, info.state, nullptr, IID_PPV_ARGS(&info.buffer));
+
+		BufferHandle handle = 0;
+		if(transient) handle = m_TransientBufferHandleCounter++;
+		else if(!m_FreeHandles.empty()) {
+			handle = m_FreeHandles.back();
+			m_FreeHandles.pop_back();
+		}
+		else handle = m_BufferHandleCounter++;
+
+		BufferHandle rawHandle = transient ? handle - TRANSIENT_HANDLE_MASK : handle;
+		auto& buffers = transient ? m_TransientBuffers : m_Buffers;
+
+
+		if (buffers.size() < rawHandle) buffers.resize(rawHandle);
+		buffers[rawHandle - 1] = info;
 
 		return handle;
 	}
@@ -190,9 +167,7 @@ namespace Graphics {
 		m_Buffers[handle - 1].frameIndex = frameIndex;
 		m_OldBuffers.push_back(m_Buffers[handle - 1]);
 
-		//m_Buffers[handle - 1].buffer.Reset();
 		m_FreeHandles.push_back(handle);
-		m_FreeList.push_back({ m_Buffers[handle - 1].heapIndex, m_Buffers[handle - 1].offset, m_Buffers[handle - 1].size });
 	}
 
 	void BufferManager::clearOldBuffers(uint32_t frameIndex)
@@ -202,7 +177,7 @@ namespace Graphics {
 			if (chunk.transient) chunk.transientOffset = 0;
 		}
 
-		for (auto it = m_TransientBuffers.begin(); it != m_TransientBuffers.end(); ++it) {
+		for (auto it = m_TransientBuffers.begin(); it != m_TransientBuffers.end(); it++) {
 			if (it->frameIndex == frameIndex) {
 				it->buffer.Reset();
 				it = m_TransientBuffers.erase(it);
@@ -212,21 +187,27 @@ namespace Graphics {
 
 		m_TransientBufferHandleCounter = TRANSIENT_HANDLE_MASK + 1;
 	
-		for (auto& buf : m_OldCopyBuffers) {
-			if (buf.frameIndex == frameIndex) {
-				buf.buffer.Reset();
+		for (auto it = m_OldCopyBuffers.begin(); it != m_OldCopyBuffers.end(); it++) {
+			if (it->frameIndex == frameIndex) {
+				it->buffer.Reset();
+				it = m_OldCopyBuffers.erase(it);
+				if (it == m_OldCopyBuffers.end()) break;
 			}
 		}
 
 		m_UploadBuf.curOffset[frameIndex] = 0 + m_UploadBuf.size * frameIndex;
 		m_ReadbackBuf.curOffset[frameIndex] = 0 + m_ReadbackBuf.size * frameIndex;
 
-		for (auto& buf : m_OldBuffers) {
-			if(buf.frameIndex == frameIndex) {
-				buf.buffer.Reset();
+		for (auto it = m_OldBuffers.begin(); it != m_OldBuffers.end(); it++) {
+
+			if(it->frameIndex == frameIndex) {
+				//Core::Logger::Info("Clearing old buffer: {}", it->allocationSize);
+				it->buffer.Reset();
+				m_FreeList.push_back({ it->heapIndex, it->offset, it->allocationSize });
+				it = m_OldBuffers.erase(it);
+				if (it == m_OldBuffers.end()) break;
 			}
 		}
-
 	}
 
 	MappedBuf BufferManager::beginMappedWrite(BufferHandle handle, uint32_t size)
@@ -277,6 +258,7 @@ namespace Graphics {
 			m_UploadBuf.size = m_UploadBuf.size + size;
 			m_UploadBuf.buffer->Map(0, nullptr, reinterpret_cast<void**>(&m_UploadBuf.mappedData));
 		}
+
 		write.mappedMemory = m_UploadBuf.mappedData + m_UploadBuf.curOffset[frameIndex];
 		write.offset = m_UploadBuf.curOffset[frameIndex];
 		m_UploadBuf.curOffset[frameIndex] += size;
@@ -373,6 +355,8 @@ namespace Graphics {
 		m_Renderer->waitForGPU();
 		m_Renderer->beginCmdList(Core::Application::getApplication()->getSwapchain()->getBackBufferIndex());
 
+		clearOldBuffers(Core::Application::getApplication()->getSwapchain()->getBackBufferIndex());
+
 		m_Renderer->getCmdList()->SetDescriptorHeaps(1, &m_Renderer->getTextureManager().getSRVDescriptorHeap());
 	}
 
@@ -467,7 +451,7 @@ namespace Graphics {
 		transitionState(handle, oldState);
 	}
 
-	void BufferManager::copy(BufferHandle srcBuffer, BufferHandle dstBuffer)
+	void BufferManager::copy(BufferHandle srcBuffer, BufferHandle dstBuffer, uint32_t srcOffset, uint32_t dstOffset, uint32_t size)
 	{
 		auto& srcBuffers = srcBuffer & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
 		auto& dstBuffers = dstBuffer & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
@@ -487,19 +471,21 @@ namespace Graphics {
 		transitionState(dstBuffer, D3D12_RESOURCE_STATE_COPY_DEST);
 
 		m_Renderer->getCmdList()->CopyBufferRegion(
-			dstBuffers[rawDstHandle - 1].buffer.Get(), 0,
-			srcBuffers[rawSrcHandle - 1].buffer.Get(), 0,
-			srcBuffers[rawSrcHandle - 1].size
+			dstBuffers[rawDstHandle - 1].buffer.Get(), dstOffset,
+			srcBuffers[rawSrcHandle - 1].buffer.Get(), srcOffset,
+			size
 		);
 
 		transitionState(srcBuffer, srcOldState);
 		transitionState(dstBuffer, dstOldState);
 	}
 
+	void BufferManager::copy(BufferHandle srcBuffer, BufferHandle dstBuffer) {
+		copy(srcBuffer, dstBuffer, 0, 0, getBuffer(srcBuffer)->GetDesc().Width);
+	}
+
 	void BufferManager::transitionState(BufferHandle handle, D3D12_RESOURCE_STATES after)
 	{	
-
-
 		auto& buffers = handle & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
 		BufferHandle rawHandle = handle & TRANSIENT_HANDLE_MASK ? handle & ~TRANSIENT_HANDLE_MASK : handle;
 
@@ -511,7 +497,7 @@ namespace Graphics {
 		AllocationInfo& bufferInfo = buffers[rawHandle - 1];
 
 		if (bufferInfo.state == after) {
-			Core::Logger::Warn("Buffer transitioning to same State");
+			//Core::Logger::Warn("Buffer transitioning to same State");
 			return;
 		}
 
@@ -526,6 +512,23 @@ namespace Graphics {
 
 		bufferInfo.state = after;
 		// Die Resource Barrier an die Command List senden
+		m_Renderer->getCmdList()->ResourceBarrier(1, &barrier);
+	}
+
+	void BufferManager::uavBarrier(BufferHandle handle) {
+		auto& buffers = handle & TRANSIENT_HANDLE_MASK ? m_TransientBuffers : m_Buffers;
+		BufferHandle rawHandle = handle & TRANSIENT_HANDLE_MASK ? handle & ~TRANSIENT_HANDLE_MASK : handle;
+
+		if (rawHandle == 0 || rawHandle > buffers.size()) {
+			Core::Logger::Error("BufferHandle invalid: {}", rawHandle);
+			return;
+		}
+
+		AllocationInfo& bufferInfo = buffers[rawHandle - 1];
+
+		D3D12_RESOURCE_BARRIER barrier{};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+		barrier.UAV.pResource = bufferInfo.buffer.Get();
 		m_Renderer->getCmdList()->ResourceBarrier(1, &barrier);
 	}
 

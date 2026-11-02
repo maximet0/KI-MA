@@ -1,5 +1,8 @@
 <Solution>
   <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Opt" />
+    <BuildType Name="Release" />
     <Platform Name="x64" />
   </Configurations>
   <Project Path="KI-MA/KI-MA.vcxproj" Id="8630c99d-cb54-40fc-8ac1-1a6df5d472c3" />

@@ -19,6 +19,7 @@ namespace Graphics {
 
 		uint64_t offset = 0;
 		uint64_t size = 0;
+		uint64_t allocationSize = 0;
 
 		uint32_t heapIndex = 0;
 		uint32_t frameIndex = 0;
@@ -75,14 +76,15 @@ namespace Graphics {
 		void submitMappedRead(MappedBuf& read, uint32_t offset, uint32_t size);
 		void executeReads();
 
-
 		//void memset(BufferHandle handle, uint32_t value, uint32_t offset, uint32_t size);
 		void write(BufferHandle handle, void* src, uint32_t offset, uint32_t size);
 
+		void copy(BufferHandle srcBuffer, BufferHandle dstBuffer, uint32_t srcOffset, uint32_t dstOffset, uint32_t size);
 		void copy(BufferHandle srcBuffer, BufferHandle dstBufffer);
 		//void read(BufferHandle buffer, void* dst, uint32_t offset, uint32_t size);
 
 		void transitionState(BufferHandle handle, D3D12_RESOURCE_STATES after);
+		void uavBarrier(BufferHandle handle);
 
 		Microsoft::WRL::ComPtr<ID3D12Resource>& getBuffer(BufferHandle handle);
 
